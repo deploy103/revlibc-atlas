@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RevLibc Atlas — 오프라인 리버싱 사전</title>
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">RevLibc&nbsp;Atlas</div>
+    <div class="search-wrap">
+      <input
+        id="search-input"
+        type="text"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        placeholder="함수, API, 상수, IDA 표현 검색... 예: mprotect 7, strcmp, _BYTE, 0x6A09E667"
+      >
+      <span id="search-time" class="search-time"></span>
+    </div>
+    <div class="header-actions">
+      <button id="ctf-mode-toggle" type="button" class="toggle-btn" aria-pressed="false" title="리버싱/CTF 빈출 항목 우선 정렬">CTF Mode</button>
+      <button id="dark-mode-toggle" type="button" class="toggle-btn">☾ Dark</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <aside class="sidebar">
+      <div class="filter-group">
+        <div class="filter-group-title">Platform</div>
+        <div id="filter-platform" class="filter-buttons"></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-group-title">Category</div>
+        <div id="filter-category" class="filter-buttons"></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-group-title">Importance</div>
+        <div id="filter-importance" class="filter-buttons"></div>
+      </div>
+      <button id="clear-filters" type="button" class="clear-filters-btn">필터 초기화</button>
+    </aside>
+
+    <section class="results-pane">
+      <div id="results-count" class="results-count">0개 결과</div>
+      <ul id="results-list" class="results-list" role="listbox" aria-label="검색 결과"></ul>
+    </section>
+
+    <section id="detail-panel" class="detail-pane" aria-live="polite"></section>
+  </main>
+
+  <footer class="app-footer">
+    <span>오프라인 전용 · CDN/외부 요청 없음 · index.html 더블클릭(file://) 실행 가능</span>
+    <span class="shortcuts-hint"><kbd>/</kbd> 또는 <kbd>Ctrl</kbd>+<kbd>K</kbd> 검색 · <kbd>↑</kbd><kbd>↓</kbd> 이동 · <kbd>Enter</kbd> 상세 · <kbd>Esc</kbd> 초기화</span>
+  </footer>
+
+  <!-- 빌드 산출물: tools/build.py 로 생성됨. fetch() 없이 <script> 로 바로 전역에 로드. -->
+  <script src="data/generated/metadata.js"></script>
+  <script src="data/generated/entries.js"></script>
+  <script src="data/generated/search-index.js"></script>
+
+  <script src="assets/js/search.js"></script>
+  <script src="assets/js/renderer.js"></script>
+  <script src="assets/js/shortcuts.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
