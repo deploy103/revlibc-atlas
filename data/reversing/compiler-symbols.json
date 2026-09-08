@@ -1,0 +1,31 @@
+[
+  {
+    "id": "compiler-stack-chk-fail",
+    "type": "function",
+    "name": "__stack_chk_fail",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["linux", "c", "glibc"],
+    "standard": "glibc / GCC",
+    "header": "",
+    "library": "libc",
+    "signature": "void __stack_chk_fail(void);",
+    "summary": "스택 카나리(canary) 값이 함수 종료 시점에 손상되어 있음을 감지했을 때 glibc가 호출하는 종료 함수.",
+    "return_value": { "success": "", "failure": "", "meaning": "반환하지 않는다 (__noreturn). 내부적으로 abort()로 이어진다.", "errno": false, "get_last_error": false },
+    "internals": "GCC의 -fstack-protector가 활성화된 함수는 프롤로그에서 TLS의 무작위 카나리 값을 스택에 저장하고, 에필로그에서 그 값을 다시 읽어 원본과 비교한다. 값이 다르면(스택 버퍼가 카나리 위치까지 덮어써졌다면) __stack_chk_fail을 호출해 'stack smashing detected' 메시지를 출력하고 즉시 프로그램을 종료한다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "바이너리에서 __stack_chk_fail 호출이 보이면 해당 함수는 스택 카나리로 보호되고 있다는 뜻이다. 스택 버퍼 오버플로우로 return address를 직접 덮어써서 실행 흐름을 바꾸려면 카나리 값을 먼저 읽어내거나 우회해야 한다(카나리를 건드리지 않는 partial overwrite, 별도 leak을 통한 카나리 획득 등).",
+      "decompiler_pattern": "if ( canary != __readfsqword(0x28) )\n  __stack_chk_fail();",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "__stack_chk_fail 자체는 취약점이 아니라 방어 메커니즘이다 - 이 함수로 이어지는 코드 경로가 있다는 것 자체는 버그가 아니다.",
+      "카나리는 프로세스 시작 시 한 번 정해져 TLS에 저장되고 여러 함수 호출에서 재사용되므로, 다른 지점에서 카나리를 leak하면 별도의 오버플로우에서 재사용해 우회할 수 있다."
+    ],
+    "security_notes": "스택 카나리는 stack smashing을 '감지'만 할 뿐 막지는 못한다 - 손상 이후 실행을 즉시 종료시켜 피해를 줄이는 mitigation이다.",
+    "related": ["pattern-stack-frame", "pattern-buffer-overflow"],
+    "tags": ["stack canary", "stack protector", "stack smashing detected", "mitigation", "fortify", "__stack_chk_fail"],
+    "sources": [{ "title": "GCC documentation - Instrumentation Options (stack protector)", "url": "https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html" }]
+  }
+]

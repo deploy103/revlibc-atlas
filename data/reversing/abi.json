@@ -1,0 +1,85 @@
+[
+  {
+    "id": "conv-sysv-amd64",
+    "type": "convention",
+    "name": "System V AMD64 ABI",
+    "aliases": ["SysV ABI", "System V x86-64 ABI", "Linux x86-64 calling convention", "SysV AMD64"],
+    "category": "calling-convention",
+    "platform": ["linux"],
+    "standard": "System V AMD64 ABI",
+    "signature": "",
+    "summary": "Linux/macOS/BSD x86-64에서 사용하는 표준 호출 규약. 정수/포인터 인자는 RDI, RSI, RDX, RCX, R8, R9 순으로, 그 이상은 스택으로 전달한다.",
+    "internals": "정수/포인터형 인자는 왼쪽부터 순서대로 RDI, RSI, RDX, RCX, R8, R9 6개 레지스터에 담기고, 7번째부터는 스택에 오른쪽에서 왼쪽 순서로 push된다. 부동소수점(float/double) 인자는 별도로 XMM0부터 XMM7까지 8개를 사용하며, 정수 인자 카운트와 독립적으로 채워진다(예: `f(int a, double b, int c)`는 a=RDI, b=XMM0, c=RSI). 가변 인자 함수(printf 등) 호출 시 AL 레지스터에 사용된 XMM 레지스터 개수를 넣어야 한다. 반환값은 정수/포인터는 RAX(64비트 초과 시 RAX:RDX), 부동소수점은 XMM0에 담긴다. 레지스터는 caller-saved(RAX, RCX, RDX, RSI, RDI, R8-R11 - 호출 후 값 보존이 보장되지 않음)와 callee-saved(RBX, RBP, RSP, R12-R15 - 호출된 함수가 값을 보존해야 함)로 나뉜다. `call` 명령 실행 직전 시점에 RSP는 16바이트 정렬(16-byte aligned)이어야 하며, 이는 SSE 명령어(movaps 등)가 정렬된 스택 접근을 요구하기 때문이다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "함수 진입부에서 인자를 어디서 읽어오는지 보면 이 ABI인지 바로 알 수 있다: 프롤로그 직후 `mov [rbp-X], rdi`, `mov [rbp-Y], rsi` 형태로 RDI/RSI/RDX/RCX/R8/R9를 스택의 지역 변수 슬롯으로 옮겨 저장하는 패턴이 전형적이다(디컴파일러가 이를 인식해 매개변수 이름을 붙인다). callee-saved 레지스터(RBX, RBP, R12-R15)를 함수 안에서 쓰려면 프롤로그에서 `push rbx` 등으로 저장하고 에필로그에서 `pop rbx`로 복원하는 코드가 보이는데, 이 저장/복원 쌍이 있으면 해당 레지스터가 callee-saved라는 증거다. IDA/Ghidra는 인자가 6개를 넘으면 `[rsp+N]`/`[rbp+N]` 스택 접근으로 표시한다.",
+      "decompiler_pattern": "int add(int a, int b, int c, int d, int e, int f, int g) {\n  // a=EDI, b=ESI, c=EDX, d=ECX, e=R8D, f=R9D, g=[rsp+8] (스택)\n  return a + b + c + d + e + f + g;\n}",
+      "ida_example": ".text:0000000000401136 sub_401136 proc near\n.text:0000000000401136        mov     [rbp-4], edi   ; 1번째 인자\n.text:0000000000401139        mov     [rbp-8], esi   ; 2번째 인자\n.text:000000000040113C        mov     [rbp-0Ch], edx ; 3번째 인자"
+    },
+    "pitfalls": [
+      "부동소수점 인자는 XMM 레지스터를 쓰므로 정수 인자용 레지스터(RDI/RSI/...) 순서에 끼워 넣지 말아야 한다 - 정수 카운트와 XMM 카운트는 서로 독립적으로 증가한다.",
+      "call 직전 16바이트 정렬을 깨뜨리면(예: push를 홀수 번 한 뒤 바로 SSE 명령을 쓰는 라이브러리 함수를 호출) 크래시가 날 수 있는데, 디스어셈블리만 봐서는 원인을 못 찾고 헤매기 쉽다.",
+      "caller-saved 레지스터(RAX, RCX, RDX, RSI, RDI, R8-R11)의 값은 함수 호출 후 보존된다고 가정하면 안 된다 - 필요하면 호출자가 직접 저장해야 한다."
+    ],
+    "related": ["reg-rsp", "reg-rbp", "pattern-stack-frame", "conv-ms-x64", "conv-cdecl"],
+    "tags": ["system v abi", "sysv", "x86-64 calling convention", "rdi rsi rdx rcx r8 r9", "linux abi", "stack alignment", "caller-saved", "callee-saved"],
+    "sources": [
+      { "title": "System V Application Binary Interface (x86-64 Architecture Processor Supplement)", "url": "https://gitlab.com/x86-psABIs/x86-64-ABI" }
+    ]
+  },
+  {
+    "id": "conv-ms-x64",
+    "type": "convention",
+    "name": "Microsoft x64 ABI",
+    "aliases": ["Windows x64 calling convention", "MS x64", "__fastcall (x64)", "Win64 ABI"],
+    "category": "calling-convention",
+    "platform": ["windows"],
+    "standard": "Microsoft x64 ABI",
+    "signature": "",
+    "summary": "Windows x86-64에서 사용하는 표준 호출 규약. 정수/포인터 인자는 RCX, RDX, R8, R9 순으로 전달하며, 호출자가 4개 인자분의 shadow space(32바이트)를 반드시 스택에 확보해야 한다는 점이 System V와 결정적으로 다르다.",
+    "internals": "정수/포인터형 인자는 왼쪽부터 RCX, RDX, R8, R9 4개 레지스터에 담기고, 5번째부터는 스택에 전달된다. 부동소수점 인자는 XMM0-XMM3 4개를 사용하되, System V와 달리 인자 위치(슬롯) 하나를 정수/부동소수점이 공유한다 - 즉 2번째 인자가 double이면 XMM1을 쓰지만 RDX 슬롯은 비워둔다(정수 레지스터 인덱스와 XMM 인덱스가 같이 증가). 반환값은 정수/포인터가 RAX, 부동소수점이 XMM0. 가장 중요한 차이는 '홈 공간(home space)' 또는 'shadow space'로, 호출자는 인자 개수와 무관하게 항상 최소 32바이트(4개 레지스터 인자 슬롯 분량)를 스택에 확보해 콜리(callee)가 RCX/RDX/R8/R9 값을 필요시 그 공간에 자유롭게 저장(spill)할 수 있게 해야 한다. callee-saved 레지스터는 RBX, RBP, RDI, RSI, RSP, R12-R15(System V보다 RDI/RSI가 추가로 callee-saved)이다. 스택은 호출 직전 16바이트 정렬이 필요하다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "함수 시작 부분에서 `mov [rsp+8], rcx`, `mov [rsp+10h], rdx`처럼 인자를 shadow space(호출자가 만들어 둔 rsp+8~rsp+20h 영역)에 저장하는 코드가 보이면 이 ABI라는 강한 신호다. 함수 호출 코드 쪽에서는 `call` 이전에 `sub rsp, 20h`(또는 그 이상, 32의 배수)로 최소 32바이트를 항상 미리 확보하는 패턴이 반복적으로 보인다 - 인자가 0~4개뿐이어도 이 32바이트는 예외 없이 확보된다. IDA는 이런 함수에 `__fastcall` 호출 규약을 자동으로 붙이는 경우가 많다.",
+      "decompiler_pattern": "__int64 __fastcall sub_140001000(__int64 a1, __int64 a2, __int64 a3, __int64 a4) {\n  // 호출 측: sub rsp, 20h  (shadow space 32바이트 확보 후 call)\n}",
+      "ida_example": ".text:0000000140001000 sub_140001000 proc near\n.text:0000000140001000        mov     [rsp+8], rcx    ; shadow space에 1번째 인자 저장\n.text:0000000140001005        mov     [rsp+10h], rdx  ; shadow space에 2번째 인자 저장\n.text:000000014000100A        sub     rsp, 28h\n...\n.text:0000000140001050        call    sub_140002000\n; 호출자 쪽: sub rsp, 20h 로 최소 32바이트 shadow space를 항상 확보"
+    },
+    "pitfalls": [
+      "System V ABI 지식만으로 x64 PE 바이너리를 읽으면 'RCX가 첫 인자, RDX가 두 번째'까지는 맞지만 shadow space(32바이트)를 위한 `sub rsp, 20h`를 인자 전달과 무관한 스택 정리로 오인하기 쉽다.",
+      "부동소수점과 정수 인자가 섞이면 System V처럼 별도 카운트가 아니라 같은 슬롯 인덱스를 공유한다는 점 - 2번째 인자가 double이면 XMM1을 쓰고 RDX 자리는 사용되지 않는다.",
+      "인자가 4개 이하라고 해서 shadow space가 생략되는 것은 아니다 - 0개여도 32바이트는 관례적으로 확보되는 경우가 많다."
+    ],
+    "related": ["reg-rsp", "reg-rbp", "conv-sysv-amd64", "conv-fastcall"],
+    "tags": ["ms x64 abi", "win64 calling convention", "rcx rdx r8 r9", "shadow space", "home space", "fastcall x64", "windows abi"],
+    "sources": [
+      { "title": "Microsoft Learn - x64 calling convention", "url": "https://learn.microsoft.com/cpp/build/x64-calling-convention" }
+    ]
+  },
+  {
+    "id": "conv-aapcs",
+    "type": "convention",
+    "name": "AAPCS (ARM Architecture Procedure Call Standard)",
+    "aliases": ["ARM Procedure Call Standard", "AAPCS64", "ARM calling convention"],
+    "category": "calling-convention",
+    "platform": ["linux"],
+    "standard": "AAPCS / AAPCS64",
+    "signature": "",
+    "summary": "ARM/AArch64 아키텍처의 표준 호출 규약(플랫폼 태그는 편의상 linux로 분류). 32비트는 R0-R3, 64비트(AArch64)는 X0-X7 레지스터로 정수 인자를 전달한다.",
+    "internals": "32비트 ARM(AAPCS)에서는 정수/포인터 인자를 R0, R1, R2, R3 4개 레지스터로 전달하고 그 이상은 스택을 사용한다. 64비트 AArch64(AAPCS64)에서는 X0부터 X7까지 8개 레지스터를 정수/포인터 인자에 사용하며, 32비트 레지스터로 볼 때는 W0-W7이라는 이름이 붙는다(Xn의 하위 32비트가 Wn). 반환값은 R0(32비트) 또는 X0(64비트)에 담기며, 64비트를 넘는 구조체 반환 등에는 별도 규칙이 있다. 부동소수점/SIMD 인자는 별도의 VFP/NEON 레지스터(S0-S15, D0-D7 등)를 사용한다. 링크 레지스터 LR(R14/X30)이 리턴 주소를 담당한다는 점이 x86과 다르다(x86은 스택에 리턴 주소를 push).",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "IoT 펌웨어나 안드로이드 네이티브 라이브러리(.so) 등 ARM/AArch64 바이너리를 리버싱할 때 마주치는 규약이다. 함수 프롤로그에서 `stp x29, x30, [sp, #-N]!` (frame pointer X29와 link register X30을 스택에 저장) 같은 패턴이 보이면 AArch64 표준 프롤로그다. 함수 인자를 확인할 때는 x86의 RDI/RSI 대신 X0/X1/... (또는 32비트는 R0/R1/...)을 확인해야 한다는 점이 핵심이며, call 명령 대신 `bl`(branch with link)이 LR에 리턴 주소를 넣고 분기한다.",
+      "decompiler_pattern": "int add(int a, int b) {\n  // AArch64: a=W0, b=W1, 반환값=W0\n  return a + b;\n}",
+      "ida_example": ".text:0000000000400580 sub_400580\n.text:0000000000400580        STP     X29, X30, [SP,#-0x10]!  ; 프레임포인터/링크레지스터 저장\n.text:0000000000400584        MOV     X29, SP\n.text:0000000000400588        ADD     W0, W0, W1              ; 1번째+2번째 인자"
+    },
+    "pitfalls": [
+      "x86 계열 습관대로 리턴 주소가 스택 최상단에 있을 것이라 기대하면 안 된다 - ARM/AArch64는 리턴 주소가 LR(X30) 레지스터에 먼저 담기고, 필요할 때만(재귀/중첩 호출) 스택에 저장된다.",
+      "32비트 AAPCS(R0-R3)와 64비트 AAPCS64(X0-X7)는 사용 가능한 레지스터 개수 자체가 다르므로, 대상 바이너리가 ARM32인지 AArch64인지 먼저 확인해야 한다."
+    ],
+    "related": ["reg-rsp", "conv-sysv-amd64", "conv-cdecl"],
+    "tags": ["aapcs", "arm calling convention", "aarch64", "r0 r1 r2 r3", "x0 x7", "link register", "iot", "android native"],
+    "sources": [
+      { "title": "ARM - Application Binary Interface for the Arm Architecture (abi-aa)", "url": "https://github.com/ARM-software/abi-aa" }
+    ]
+  }
+]

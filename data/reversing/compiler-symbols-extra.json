@@ -1,0 +1,456 @@
+[
+  {
+    "id": "compiler-libc-start-main",
+    "type": "function",
+    "name": "__libc_start_main",
+    "aliases": ["__libc_start_main_impl", "__libc_start_call_main"],
+    "category": "decompiler",
+    "platform": ["linux", "c", "glibc"],
+    "standard": "glibc / GCC",
+    "header": "",
+    "library": "libc",
+    "signature": "int __libc_start_main(int (*main)(int, char **, char **), int argc, char **argv, void (*init)(void), void (*fini)(void), void (*rtld_fini)(void), void *stack_end);",
+    "summary": "ELF의 진짜 진입점(_start)이 호출하는 glibc 초기화 함수로, 런타임 초기화를 마친 뒤 사용자 정의 main()을 호출한다.",
+    "parameters": [
+      { "name": "main", "type": "int (*)(int, char **, char **)", "desc": "사용자가 작성한 실제 main 함수의 포인터", "direction": "in", "nullable": false },
+      { "name": "argc", "type": "int", "desc": "명령행 인자 개수 (스택에서 그대로 전달됨)", "direction": "in", "nullable": false },
+      { "name": "argv", "type": "char **", "desc": "명령행 인자 배열", "direction": "in", "nullable": false },
+      { "name": "init", "type": "void (*)(void)", "desc": "전역 생성자 실행용 초기화 함수 (보통 __libc_csu_init)", "direction": "in", "nullable": true },
+      { "name": "fini", "type": "void (*)(void)", "desc": "종료 시 호출될 정리 함수 (보통 __libc_csu_fini)", "direction": "in", "nullable": true },
+      { "name": "rtld_fini", "type": "void (*)(void)", "desc": "동적 링커(ld.so)의 정리 함수", "direction": "in", "nullable": true },
+      { "name": "stack_end", "type": "void *", "desc": "초기 스택 포인터 (auxiliary vector 등을 찾는 데 사용)", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "",
+      "failure": "",
+      "meaning": "main()의 반환값을 받아 exit()에 전달하므로 정상적으로는 이 함수 자체가 반환하지 않는다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "// 이 함수는 사용자가 직접 호출하지 않는다. 아무 C 프로그램이나 컴파일하면\n// _start가 자동으로 __libc_start_main을 호출하도록 링커가 구성한다.\n#include <stdio.h>\n\nint main(int argc, char **argv)\n{\n    printf(\"hello\\n\");\n    return 0;\n}\n",
+    "example_output": "hello\n",
+    "compile_cmd": "gcc example.c -o example && objdump -d example | less  # _start 디스어셈블리에서 __libc_start_main 호출 확인",
+    "internals": "_start(어셈블리로 작성된 진짜 ELF entry point)는 스택에서 argc/argv를 꺼내 main 함수 포인터와 함께 __libc_start_main으로 전달한다. __libc_start_main은 TLS 초기화, 스택 보호(카나리) 초기화, .init_array에 등록된 전역 생성자 실행 등을 마친 뒤 main(argc, argv, envp)을 호출하고, 그 반환값을 exit()에 넘겨 프로그램을 종료시킨다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "strip되었거나 심볼이 제거된 바이너리에서 진짜 main 함수를 찾는 표준적인 방법은 ELF의 entry point(_start)를 따라가 __libc_start_main 호출을 찾고, 그 첫 번째 인자로 전달되는 함수 포인터를 확인하는 것이다 - 그것이 곧 사용자 정의 main이다.",
+      "decompiler_pattern": "__libc_start_main(main, argc, argv, __libc_csu_init, __libc_csu_fini, 0, *(void **)&argc);\n// 첫 번째 인자 'main'이 실제 사용자 main 함수 주소",
+      "ida_example": "int __fastcall _start()\n{\n  return __libc_start_main(sub_4011A0, argc, argv, 0, 0, 0, *(a8 - 8));\n}\n// sub_4011A0 이 실제 main"
+    },
+    "assembly_pattern": "_start:\n  xor ebp, ebp\n  pop rsi              ; argc\n  mov rdx, rsp         ; argv\n  ...\n  lea rdi, [rip+main]  ; 첫 번째 인자 = 사용자 main 주소\n  call __libc_start_main",
+    "pitfalls": [
+      "strip된 바이너리라도 _start -> __libc_start_main 호출의 첫 인자를 추적하면 항상 진짜 main을 특정할 수 있다.",
+      "glibc 2.34 이후 내부 구현이 __libc_start_call_main으로 리팩토링되어 심볼 이름/흐름이 버전별로 조금씩 달라 보일 수 있다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "__libc_start_main", "windows": "__scrt_common_main_seh" },
+    "related": ["compiler-scrt-common-main-seh", "compiler-stack-chk-fail"],
+    "tags": ["entry point", "_start", "real main", "strip", "ELF entry point", "initialization", "진짜 main 찾기"],
+    "sources": [
+      { "title": "glibc source - csu/libc-start.c", "url": "https://sourceware.org/git/?p=glibc.git;a=blob;f=csu/libc-start.c" }
+    ]
+  },
+  {
+    "id": "compiler-cxa-finalize",
+    "type": "function",
+    "name": "__cxa_finalize",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["linux", "c", "glibc"],
+    "standard": "glibc / Itanium C++ ABI",
+    "header": "",
+    "library": "libc",
+    "signature": "void __cxa_finalize(void *d);",
+    "summary": "프로그램 종료 또는 공유 라이브러리 언로드 시 atexit/전역 소멸자(destructor)로 등록된 함수들을 등록의 역순으로 실행한다.",
+    "parameters": [
+      { "name": "d", "type": "void *", "desc": "특정 공유 객체(DSO)의 핸들. NULL이면 등록된 모든 소멸자를 실행한다.", "direction": "in", "nullable": true }
+    ],
+    "return_value": {
+      "success": "",
+      "failure": "",
+      "meaning": "반환값 없음(void).",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "#include <stdio.h>\n#include <stdlib.h>\n\nvoid cleanup(void)\n{\n    printf(\"cleanup called\\n\");\n}\n\nint main(void)\n{\n    atexit(cleanup); // 내부적으로 __cxa_atexit에 등록되고, exit() 시 __cxa_finalize가 실행\n    printf(\"main done\\n\");\n    return 0;\n}\n",
+    "example_output": "main done\ncleanup called\n",
+    "compile_cmd": "gcc example.c -o example && ./example",
+    "internals": "atexit()/__cxa_atexit()로 등록된 콜백과 C++ 전역 객체 소멸자는 내부의 __exit_funcs 연결 리스트에 저장된다. __cxa_finalize는 exit() 경로와 dlclose() 양쪽에서 호출되어 이 리스트를 등록의 역순으로 순회하며 실행한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "바이너리의 종료 루틴(exit, _fini 근처)에서 흔히 호출부가 보인다. 정상적인 종료 처리 흐름의 일부이므로 그 자체를 의심할 필요는 없지만, atexit으로 등록된 콜백을 추적할 때 이 함수를 기준점으로 삼을 수 있다.",
+      "decompiler_pattern": "__cxa_finalize(0);\n// __run_exit_handlers -> exit() 경로에서 호출됨",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "__cxa_finalize(NULL)은 모든 소멸자를 실행하지만, 공유 라이브러리 dlclose() 시에는 해당 DSO 핸들만 넘겨 그 라이브러리의 소멸자만 실행한다는 점을 혼동하지 말 것."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "__cxa_finalize", "windows": "atexit 콜백 체인 (CRT의 _initterm/_execute_onexit_table)" },
+    "related": ["compiler-libc-start-main"],
+    "tags": ["destructor", "atexit", "__cxa_atexit", "program termination", "종료 루틴"],
+    "sources": [
+      { "title": "glibc manual - Program Termination", "url": "https://sourceware.org/glibc/manual/latest/html_node/Program-Termination.html" }
+    ]
+  },
+  {
+    "id": "compiler-gmon-start",
+    "type": "function",
+    "name": "__gmon_start__",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["linux", "c", "glibc"],
+    "standard": "glibc / GCC",
+    "header": "",
+    "library": "libc",
+    "signature": "void __gmon_start__(void);",
+    "summary": "gprof 프로파일링 초기화를 위한 함수로, -pg 없이 컴파일한 대부분의 바이너리에서는 실제로 아무 동작도 하지 않는 weak symbol로 남아 있다.",
+    "parameters": [],
+    "return_value": {
+      "success": "",
+      "failure": "",
+      "meaning": "반환값 없음(void). 정의되지 않은 weak symbol인 경우 호출 자체가 조건부로 생략된다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "// 일반적인 컴파일에서는 이 심볼이 정의되지 않은 weak symbol로 남는다.\n#include <stdio.h>\n\nint main(void)\n{\n    printf(\"hello\\n\");\n    return 0;\n}\n",
+    "example_output": "hello\n",
+    "compile_cmd": "gcc -pg example.c -o example  # -pg를 붙이면 gcrt1.o가 링크되며 __gmon_start__가 실제 gprof 초기화를 수행",
+    "internals": "gcc -pg로 프로파일링을 활성화해 컴파일하지 않는 한 __gmon_start__는 정의되지 않은 weak symbol이며, .init 섹션의 초기화 코드는 이 심볼의 주소가 NULL이 아닌 경우에만 호출하도록 생성된다. -pg 없이 컴파일된 일반 바이너리에서는 사실상 아무 일도 일어나지 않는다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "IDA/Ghidra에서 __gmon_start__ 호출부(주로 frame_dummy나 register_tm_clones 근처)가 보여도 대부분의 CTF/일반 바이너리에서는 실질적인 동작이 없는 컴파일러 산출물의 일부이므로 분석 우선순위가 낮다. 이 함수를 실제 로직으로 착각해 시간을 낭비하지 않는 것이 중요하다.",
+      "decompiler_pattern": "if ( &__gmon_start__ )\n  __gmon_start__();",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "__gmon_start__ 호출이 보인다고 해서 프로그램이 프로파일링되고 있다고 오해하지 말 것 - weak symbol이 NULL이면 호출 자체가 건너뛰어진다.",
+      "이 심볼은 거의 항상 무시해도 되는 보일러플레이트이며, 실제 프로그램 로직과는 무관하다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "__gmon_start__", "windows": "" },
+    "related": [],
+    "tags": ["gprof", "profiling", "weak symbol", "frame_dummy", "무시해도 되는 심볼"],
+    "sources": [
+      { "title": "GCC documentation - Debugging Options (-pg)", "url": "https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html" }
+    ]
+  },
+  {
+    "id": "compiler-errno-location",
+    "type": "function",
+    "name": "__errno_location",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["linux", "c", "glibc"],
+    "standard": "glibc",
+    "header": "",
+    "library": "libc",
+    "signature": "int *__errno_location(void);",
+    "summary": "현재 스레드에 대한 errno 변수의 주소를 반환한다. 소스코드의 errno는 실제로는 이 함수 호출 결과를 역참조하는 매크로다.",
+    "parameters": [],
+    "return_value": {
+      "success": "현재 스레드의 errno 변수 주소 (int *)",
+      "failure": "",
+      "meaning": "실패라는 개념이 없다 - 항상 유효한 포인터를 반환한다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      { "name": "ENOENT", "decimal": 2, "hex": "0x2", "desc": "No such file or directory" },
+      { "name": "EACCES", "decimal": 13, "hex": "0xD", "desc": "Permission denied" },
+      { "name": "EINVAL", "decimal": 22, "hex": "0x16", "desc": "Invalid argument" }
+    ],
+    "example_code": "#include <stdio.h>\n#include <errno.h>\n#include <string.h>\n\nint main(void)\n{\n    FILE *fp = fopen(\"/no/such/file\", \"r\");\n    if (!fp) {\n        // errno는 매크로: *__errno_location()\n        printf(\"errno = %d (%s)\\n\", errno, strerror(errno));\n    }\n    return 0;\n}\n",
+    "example_output": "errno = 2 (No such file or directory)\n",
+    "compile_cmd": "gcc example.c -o example && ./example",
+    "internals": "멀티스레드 환경에서 errno가 스레드마다 독립적인 값을 가져야 하므로, glibc는 errno를 전역 변수가 아니라 '#define errno (*__errno_location())' 매크로로 정의한다. 즉 소스코드에서 errno를 읽거나 쓰는 모든 지점이 실제로는 __errno_location() 호출 후 그 결과를 역참조하는 코드로 컴파일된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "디컴파일 결과에서 *__errno_location() = 22 또는 if ( *__errno_location() == 2 ) 같은 코드가 보인다면 이것이 바로 소스의 errno 접근이라는 것을 알아야 한다. 소스에 없던 함수 호출이 갑자기 나타나는 대표적인 사례 중 하나다.",
+      "decompiler_pattern": "if ( *__errno_location() == 2 )  // errno == ENOENT\n  puts(\"file not found\");",
+      "ida_example": "v1 = __errno_location();\nif ( *v1 == 13 )\n  sub_401500();"
+    },
+    "pitfalls": [
+      "__errno_location()의 반환값(포인터) 자체가 아니라 그것을 역참조한 값이 errno의 실제 값이라는 점에 주의."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "__errno_location", "windows": "_errno / GetLastError (별개의 메커니즘)" },
+    "related": ["compiler-libc-start-main"],
+    "tags": ["errno", "thread-local", "TLS", "__errno_location", "errno 매크로"],
+    "sources": [
+      { "title": "glibc manual - Checking for Errors", "url": "https://sourceware.org/glibc/manual/latest/html_node/Checking-for-Errors.html" }
+    ]
+  },
+  {
+    "id": "compiler-printf-chk",
+    "type": "function",
+    "name": "__printf_chk",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["linux", "c", "glibc"],
+    "standard": "glibc / _FORTIFY_SOURCE",
+    "header": "",
+    "library": "libc",
+    "signature": "int __printf_chk(int flag, const char *format, ...);",
+    "summary": "_FORTIFY_SOURCE가 활성화된 상태에서 컴파일러가 printf 호출을 자동으로 치환하는 검사판 함수 - 형식 문자열의 %n 사용 등에 대해 추가 검증을 수행한다.",
+    "parameters": [
+      { "name": "flag", "type": "int", "desc": "검사 수준을 나타내는 값(보통 1). 1이면 형식 문자열이 쓰기 가능한 메모리에 있으면서 %n을 포함할 경우 검사를 수행한다.", "direction": "in", "nullable": false },
+      { "name": "format", "type": "const char *", "desc": "printf와 동일한 형식 문자열", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "출력된 문자 수 (printf와 동일)",
+      "failure": "음수 (오류 발생 시)",
+      "meaning": "일반 printf와 동일한 반환값 규약을 따른다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    printf(\"value = %d\\n\", 42); // -D_FORTIFY_SOURCE=2 -O2 로 컴파일하면 __printf_chk(1, ...)로 치환됨\n    return 0;\n}\n",
+    "example_output": "value = 42\n",
+    "compile_cmd": "gcc -D_FORTIFY_SOURCE=2 -O2 example.c -o example && ./example",
+    "internals": "_FORTIFY_SOURCE=1 이상 + 최적화(-O1 이상)로 컴파일하면 <stdio.h>의 printf 관련 매크로/inline이 실제 printf 호출을 __printf_chk로 치환한다. 인자 구성은 원래 printf와 거의 같지만 맨 앞에 flag가 추가된다. 이 함수는 포맷 스트링을 통한 임의 쓰기(특히 %n)를 일부 완화하기 위한 추가 검사를 수행한 뒤 내부적으로 vfprintf 계열로 위임한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "소스코드에는 printf(...)라고만 되어 있는데 디스어셈블리/디컴파일 결과에는 __printf_chk가 보인다면, 이는 해당 바이너리가 -D_FORTIFY_SOURCE=2 -O1 이상으로 컴파일되었다는 강력한 힌트다. 인자 목록 맨 앞의 flag(보통 1)는 원본 소스의 printf 인자가 아니므로 무시하고 그 다음 인자부터가 실제 포맷 문자열이다. 포맷 스트링 버그(특히 %n)를 분석할 때 이 검사로 인해 일부 공격이 막혀 있을 수 있음을 감안해야 한다.",
+      "decompiler_pattern": "__printf_chk(1, \"value: %d\\n\", v1);\n// 원본 소스: printf(\"value: %d\\n\", v1);",
+      "ida_example": "__printf_chk(1LL, \"result = %d\\n\", result);"
+    },
+    "pitfalls": [
+      "__printf_chk가 보이지 않는다고 _FORTIFY_SOURCE가 꺼져 있다고 단정할 수 없다 - 컴파일러가 컴파일 타임에 포맷 문자열과 인자를 완전히 검증 가능하다고 판단하면 일반 printf 호출로 그대로 남기기도 한다."
+    ],
+    "security_notes": "_FORTIFY_SOURCE 기반 *_chk 함수들은 포맷 스트링/버퍼 오버플로우 취약점을 '완화'할 뿐 근본적으로 막지는 못한다 - 컴파일 타임에 크기를 알 수 없는 경우 검사가 사실상 무력화된다.",
+    "equivalents": { "linux": "__printf_chk", "windows": "" },
+    "related": ["c-printf", "compiler-stack-chk-fail", "compiler-memcpy-chk"],
+    "tags": ["_FORTIFY_SOURCE", "fortify", "printf_chk", "format string", "포맷 스트링 버그"],
+    "sources": [
+      { "title": "glibc manual - Source Fortification", "url": "https://sourceware.org/glibc/manual/latest/html_node/Source-Fortification.html" }
+    ]
+  },
+  {
+    "id": "compiler-memcpy-chk",
+    "type": "function",
+    "name": "__memcpy_chk",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["linux", "c", "glibc"],
+    "standard": "glibc / _FORTIFY_SOURCE",
+    "header": "",
+    "library": "libc",
+    "signature": "void *__memcpy_chk(void *dest, const void *src, size_t len, size_t destlen);",
+    "summary": "memcpy의 fortify 버전. 컴파일 타임에 알려진 대상 버퍼 크기(destlen)를 복사 길이(len)와 비교해 넘칠 경우 즉시 프로그램을 abort시킨다.",
+    "parameters": [
+      { "name": "dest", "type": "void *", "desc": "복사 대상 버퍼", "direction": "out", "nullable": false },
+      { "name": "src", "type": "const void *", "desc": "복사할 원본 버퍼", "direction": "in", "nullable": false },
+      { "name": "len", "type": "size_t", "desc": "복사할 바이트 수", "direction": "in", "nullable": false },
+      { "name": "destlen", "type": "size_t", "desc": "컴파일러가 __builtin_object_size(dest, 0)으로 계산한 dest의 실제 크기", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "dest 포인터",
+      "failure": "",
+      "meaning": "len > destlen이면 'buffer overflow detected' 메시지를 출력하고 abort()하므로 실패 시 반환값 자체가 의미 없다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      { "name": "unchecked destlen (64비트)", "decimal": 18446744073709551615, "hex": "0xFFFFFFFFFFFFFFFF", "desc": "컴파일 타임에 dest 크기를 알 수 없을 때 전달되는 값 (size_t)-1 - 사실상 검사가 비활성화된 상태" }
+    ],
+    "example_code": "#include <string.h>\n\nint main(void)\n{\n    char buf[16];\n    char src[64] = \"0123456789ABCDEF0123456789ABCDEF\";\n    memcpy(buf, src, sizeof(src)); // buf 크기가 컴파일 타임에 16으로 알려져 __memcpy_chk로 치환됨\n    return 0;\n}\n",
+    "example_output": "*** buffer overflow detected ***: terminated\nAborted (core dumped)\n",
+    "compile_cmd": "gcc -D_FORTIFY_SOURCE=2 -O2 example.c -o example && ./example",
+    "internals": "GCC가 컴파일 타임에 __builtin_object_size(dest, 0)으로 dest의 크기를 알 수 있는 경우(주로 스택의 고정 크기 배열이나 크기가 알려진 malloc 결과), memcpy 호출을 __memcpy_chk로 치환하고 그 크기를 destlen으로 추가 전달한다. 런타임에 len > destlen이면 __chk_fail이 호출되어 'buffer overflow detected' 메시지를 출력한 뒤 abort()한다. 크기를 컴파일 타임에 알 수 없으면 destlen에 (size_t)-1이 전달되어 사실상 검사 없이 일반 memcpy처럼 동작한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "__memcpy_chk(dst, src, len, destlen)에서 destlen이 컴파일 타임에 알려진 목적지 버퍼의 실제 크기이므로, 이 값 자체가 리버싱 시 스택/힙 버퍼 크기를 알아내는 직접적인 단서가 된다. destlen이 (size_t)-1 / 0xFFFFFFFFFFFFFFFF로 나타나면 사실상 검사가 무력화된 것이므로 오버플로우 가능성을 우선적으로 의심해야 한다.",
+      "decompiler_pattern": "__memcpy_chk(buf, src, len, 64LL);  // buf는 컴파일 타임에 크기 64로 알려진 버퍼",
+      "ida_example": "__memcpy_chk(&buf, src, n, 64LL);\nif ( n > 64 )\n  __chk_fail();"
+    },
+    "pitfalls": [
+      "destlen과 len을 혼동하기 쉽다 - destlen은 '허용 가능한 최대 크기', len은 '실제로 복사하려는 크기'다.",
+      "-D_FORTIFY_SOURCE=2가 켜져 있어도 malloc으로 할당한 가변 크기 버퍼처럼 컴파일 타임에 크기를 알 수 없으면 사실상 보호받지 못한다."
+    ],
+    "security_notes": "_FORTIFY_SOURCE의 *_chk 함수들은 컴파일러가 정적으로 버퍼 크기를 알 수 있는 경우에만 효과가 있으며, 동적으로 크기가 결정되는 버퍼에는 보호를 제공하지 못한다.",
+    "equivalents": { "linux": "__memcpy_chk", "windows": "" },
+    "related": ["c-memcpy", "compiler-printf-chk", "pattern-buffer-overflow"],
+    "tags": ["_FORTIFY_SOURCE", "fortify", "memcpy_chk", "buffer overflow", "__builtin_object_size"],
+    "sources": [
+      { "title": "glibc manual - Source Fortification", "url": "https://sourceware.org/glibc/manual/latest/html_node/Source-Fortification.html" }
+    ]
+  },
+  {
+    "id": "compiler-strcpy-chk",
+    "type": "function",
+    "name": "__strcpy_chk",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["linux", "c", "glibc"],
+    "standard": "glibc / _FORTIFY_SOURCE",
+    "header": "",
+    "library": "libc",
+    "signature": "char *__strcpy_chk(char *dest, const char *src, size_t destlen);",
+    "summary": "strcpy의 fortify 버전. 컴파일 타임에 알려진 대상 버퍼 크기(destlen)를 넘는 문자열을 복사하려 하면 즉시 프로그램을 abort시킨다.",
+    "parameters": [
+      { "name": "dest", "type": "char *", "desc": "복사 대상 버퍼", "direction": "out", "nullable": false },
+      { "name": "src", "type": "const char *", "desc": "복사할 널 종료 원본 문자열", "direction": "in", "nullable": false },
+      { "name": "destlen", "type": "size_t", "desc": "컴파일러가 __builtin_object_size(dest, 0)으로 계산한 dest의 실제 크기", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "dest 포인터",
+      "failure": "",
+      "meaning": "strlen(src) + 1 > destlen이면 'buffer overflow detected' 메시지를 출력하고 abort()한다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "#include <string.h>\n\nint main(void)\n{\n    char buf[8];\n    const char *src = \"this string is way longer than 8 bytes\";\n    strcpy(buf, src); // buf 크기가 컴파일 타임에 8로 알려져 __strcpy_chk로 치환됨\n    return 0;\n}\n",
+    "example_output": "*** buffer overflow detected ***: terminated\nAborted (core dumped)\n",
+    "compile_cmd": "gcc -D_FORTIFY_SOURCE=2 -O2 example.c -o example && ./example",
+    "internals": "GCC가 컴파일 타임에 dest 버퍼의 크기를 알 수 있는 경우 strcpy 호출을 __strcpy_chk로 치환한다. 런타임에 src의 길이(널 종료 포함)가 destlen을 넘으면 __chk_fail을 호출해 프로그램을 즉시 종료시킨다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "__strcpy_chk(dest, src, destlen)의 destlen은 __memcpy_chk와 마찬가지로 컴파일 타임에 알려진 dest 버퍼 크기를 그대로 드러내므로, 스택 버퍼의 실제 크기를 특정하는 데 유용하다. strcpy 자체가 길이 제한이 없는 위험한 함수라는 점은 그대로이므로, src의 길이를 공격자가 제어할 수 있는지가 여전히 핵심 분석 포인트다.",
+      "decompiler_pattern": "__strcpy_chk(buf, src, 8LL);  // buf는 컴파일 타임에 크기 8로 알려진 버퍼",
+      "ida_example": "__strcpy_chk(dest, s, 32LL);"
+    },
+    "pitfalls": [
+      "__strcpy_chk가 있다고 해서 strcpy 자체가 안전해지는 것은 아니다 - 단지 컴파일 타임에 알려진 고정 크기 버퍼에 한해 오버플로우를 '감지'해 종료시킬 뿐이다.",
+      "destlen이 (size_t)-1이면 사실상 검사가 없는 것과 같다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "__strcpy_chk", "windows": "strcpy_s (다른 메커니즘)" },
+    "related": ["c-strcpy", "compiler-memcpy-chk", "pattern-buffer-overflow"],
+    "tags": ["_FORTIFY_SOURCE", "fortify", "strcpy_chk", "buffer overflow", "__builtin_object_size"],
+    "sources": [
+      { "title": "glibc manual - Source Fortification", "url": "https://sourceware.org/glibc/manual/latest/html_node/Source-Fortification.html" }
+    ]
+  },
+  {
+    "id": "compiler-sprintf-chk",
+    "type": "function",
+    "name": "__sprintf_chk",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["linux", "c", "glibc"],
+    "standard": "glibc / _FORTIFY_SOURCE",
+    "header": "",
+    "library": "libc",
+    "signature": "int __sprintf_chk(char *s, int flag, size_t slen, const char *format, ...);",
+    "summary": "sprintf의 fortify 버전. 포맷팅 결과가 대상 버퍼 크기(slen)를 넘으면 즉시 프로그램을 abort시킨다.",
+    "parameters": [
+      { "name": "s", "type": "char *", "desc": "포맷팅 결과가 기록될 버퍼", "direction": "out", "nullable": false },
+      { "name": "flag", "type": "int", "desc": "검사 수준을 나타내는 값(보통 1)", "direction": "in", "nullable": false },
+      { "name": "slen", "type": "size_t", "desc": "컴파일러가 계산한 s의 실제 크기", "direction": "in", "nullable": false },
+      { "name": "format", "type": "const char *", "desc": "sprintf와 동일한 형식 문자열", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "기록된(널 종료 제외) 문자 수",
+      "failure": "음수",
+      "meaning": "포맷팅 결과 길이가 slen을 넘으면 'buffer overflow detected'로 abort하므로 실패 시 반환값은 의미가 없다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    char buf[8];\n    int id = 123456789;\n    sprintf(buf, \"id=%d\", id); // buf 크기가 컴파일 타임에 8로 알려져 __sprintf_chk로 치환됨, 결과 길이 초과 시 abort\n    return 0;\n}\n",
+    "example_output": "*** buffer overflow detected ***: terminated\nAborted (core dumped)\n",
+    "compile_cmd": "gcc -D_FORTIFY_SOURCE=2 -O2 example.c -o example && ./example",
+    "internals": "sprintf(s, fmt, ...) 호출이 _FORTIFY_SOURCE 하에서 __sprintf_chk(s, flag, slen, fmt, ...)로 치환된다. flag는 %n 사용 제한 여부 등을 나타내고, slen은 __builtin_object_size(s, 0)로 계산된 목적지 크기다. 실제 포맷팅 결과 길이가 slen을 넘으면 'buffer overflow detected'로 abort한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "__sprintf_chk(s, flag, slen, fmt, ...)에서도 slen이 목적지 버퍼의 컴파일 타임 크기를 드러낸다. sprintf는 길이 제한이 없는 대표적인 위험 함수이므로, 이 chk 버전이 보인다는 것은 곧 원본 코드에 잠재적 버퍼 오버플로우 지점이 있었고 컴파일러가 이를 완화하려 시도했다는 신호다. 여전히 slen이 (size_t)-1이면 무방비 상태다.",
+      "decompiler_pattern": "__sprintf_chk(buf, 1, 8LL, \"id=%d\", id);\n// 원본 소스: sprintf(buf, \"id=%d\", id);",
+      "ida_example": "__sprintf_chk(dest, 1, 64LL, \"%s-%d\", name, id);"
+    },
+    "pitfalls": [
+      "snprintf와 혼동하지 말 것 - snprintf는 사용자가 직접 크기를 지정하는 안전한 함수이고, __sprintf_chk는 원래 sprintf 호출을 컴파일러가 자동으로 감시용으로 바꾼 것이다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "__sprintf_chk", "windows": "sprintf_s (다른 메커니즘)" },
+    "related": ["c-sprintf", "compiler-printf-chk", "compiler-strcpy-chk"],
+    "tags": ["_FORTIFY_SOURCE", "fortify", "sprintf_chk", "buffer overflow", "__builtin_object_size"],
+    "sources": [
+      { "title": "glibc manual - Source Fortification", "url": "https://sourceware.org/glibc/manual/latest/html_node/Source-Fortification.html" }
+    ]
+  },
+  {
+    "id": "compiler-security-check-cookie",
+    "type": "function",
+    "name": "__security_check_cookie",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["windows"],
+    "standard": "MSVC / CRT (/GS)",
+    "header": "",
+    "library": "N/A",
+    "signature": "void __fastcall __security_check_cookie(UINT_PTR StackCookie);",
+    "summary": "MSVC의 /GS 스택 보호 옵션이 생성하는 스택 쿠키(카나리) 검사 함수 - glibc의 __stack_chk_fail에 대응하는 Windows 측 메커니즘.",
+    "parameters": [
+      { "name": "StackCookie", "type": "UINT_PTR", "desc": "함수 에필로그에서 다시 계산한 쿠키 값. 전역 __security_cookie의 원본과 비교된다.", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "",
+      "failure": "",
+      "meaning": "값이 일치하면 반환하지만, 일치하지 않으면 내부적으로 __report_gsfailure를 호출해 프로세스를 즉시 종료시키므로 사실상 반환하지 않는 경로가 존재한다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "// cl /GS example.c 로 컴파일하면 아래 함수의 에필로그에\n// __security_check_cookie 호출이 자동으로 삽입된다.\n#include <string.h>\n\nvoid vulnerable(const char *input)\n{\n    char buf[64];\n    strcpy(buf, input);\n}\n\nint main(void)\n{\n    vulnerable(\"test\");\n    return 0;\n}\n",
+    "example_output": "(정상 입력에서는 아무 출력 없이 정상 종료; buf를 덮어써 쿠키가 손상되면 __security_check_cookie가 실행을 즉시 중단시킨다.)",
+    "compile_cmd": "cl /GS example.c",
+    "internals": "/GS 옵션이 켜진 함수는 프롤로그에서 전역 __security_cookie 값을 스택 프레임에 저장하고(보통 프레임 포인터와 XOR한 값), 에필로그에서 이를 다시 읽어 __security_check_cookie에 인자로 넘겨 검사를 요청한다. 저장된 값과 현재 계산된 값이 다르면 __report_gsfailure를 호출해 프로세스를 즉시 종료시킨다 - glibc의 __stack_chk_fail과 동일한 역할이다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "x64 MSVC 바이너리에서 함수 에필로그 직전에 저장된 쿠키를 읽어 XOR 연산 후 __security_check_cookie를 호출하는 패턴이 보이면 해당 함수는 /GS 스택 보호가 적용된 것이다. __stack_chk_fail과 마찬가지로, 스택 버퍼 오버플로우로 return address를 직접 덮어써서 실행 흐름을 바꾸려면 이 쿠키 검사를 먼저 우회(leak, partial overwrite 등)해야 한다.",
+      "decompiler_pattern": "v2 = __security_cookie ^ (unsigned __int64)&v5;\n...\n__security_check_cookie(v2 ^ (unsigned __int64)&v5);",
+      "ida_example": "v4 = *(_QWORD *)__security_cookie ^ (unsigned __int64)&v10;\n...\n__security_check_cookie(v4 ^ (unsigned __int64)&v10);\nreturn result;"
+    },
+    "assembly_pattern": "mov rcx, [rbp+0x38]\nxor rcx, rbp\ncall __security_check_cookie",
+    "pitfalls": [
+      "__security_cookie(전역 쿠키 원본 데이터)와 __security_check_cookie(검사 함수)를 혼동하지 말 것 - 전자는 데이터, 후자는 함수다.",
+      "x86에서는 함수 호출 대신 비교/점프가 인라인되어 곧바로 __report_gsfailure로 이어지도록 최적화되는 경우도 있다."
+    ],
+    "security_notes": "GS 쿠키는 스택 손상을 감지한 뒤 즉시 종료시키는 mitigation일 뿐 오버플로우 자체를 막지는 못한다 - __stack_chk_fail과 성격이 같다.",
+    "equivalents": { "linux": "__stack_chk_fail", "windows": "__security_check_cookie" },
+    "related": ["compiler-stack-chk-fail", "pattern-stack-frame", "pattern-buffer-overflow"],
+    "tags": ["/GS", "stack cookie", "security cookie", "stack protector", "MSVC", "스택 카나리"],
+    "sources": [
+      { "title": "Microsoft Learn - /GS (Buffer Security Check)", "url": "https://learn.microsoft.com/cpp/build/reference/gs-buffer-security-check" }
+    ]
+  },
+  {
+    "id": "compiler-scrt-common-main-seh",
+    "type": "function",
+    "name": "__scrt_common_main_seh",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["windows"],
+    "standard": "MSVC / CRT",
+    "header": "",
+    "library": "N/A",
+    "signature": "int __scrt_common_main_seh(void);",
+    "summary": "MSVC CRT의 실제 시작 루틴으로, PE 진입점(mainCRTStartup 등)에서 호출되어 CRT 초기화를 마친 뒤 사용자 정의 main()을 호출한다 - Linux의 __libc_start_main과 유사한 역할.",
+    "parameters": [],
+    "return_value": {
+      "success": "",
+      "failure": "",
+      "meaning": "사용자 main()의 반환값을 받아 exit()에 전달하므로 정상적으로는 반환하지 않는다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "#include <stdio.h>\n\nint main(int argc, char **argv)\n{\n    printf(\"hello\\n\");\n    return 0;\n}\n// cl로 컴파일하면 PE entry point(mainCRTStartup) -> __scrt_common_main_seh -> main() 순으로 호출된다.\n",
+    "example_output": "hello\n",
+    "compile_cmd": "cl example.c",
+    "internals": "PE의 엔트리포인트는 실제로는 mainCRTStartup/wmainCRTStartup 같은 CRT 함수이며, 이들은 내부적으로 __scrt_common_main_seh를 호출한다. 이 함수는 SEH(구조적 예외 처리) 프레임 설정, C 런타임 초기화(__security_init_cookie, 전역 생성자 실행 등), 힙/로케일 초기화를 수행한 뒤 사용자 정의 main/wmain을 호출하고 그 반환값을 exit()에 전달한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "strip되었거나 최적화된 MSVC 바이너리에서 PE 엔트리포인트를 따라가면 mainCRTStartup을 거쳐 __scrt_common_main_seh 호출에 도달하고, 그 안에서 결국 사용자 정의 main 함수 호출을 찾을 수 있다 - Linux ELF의 _start -> __libc_start_main -> main 흐름과 대응되는 탐색 경로다.",
+      "decompiler_pattern": "int __scrt_common_main_seh(void)\n{\n  __security_init_cookie();\n  ...\n  main_result = main(__argc, __argv, _environ);\n  exit(main_result);\n}",
+      "ida_example": "int __scrt_common_main_seh()\n{\n  ...\n  v0 = main(__argc, __argv, _environ);\n  exit(v0);\n}"
+    },
+    "pitfalls": [
+      "정적으로 링크된 CRT를 가진 릴리스 빌드에서는 이 함수가 인라인되거나 이름이 보이지 않을 수 있으므로, __security_init_cookie 호출이나 SEH 설정 패턴으로 시작 루틴임을 알아채야 하는 경우도 있다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "__libc_start_main", "windows": "__scrt_common_main_seh" },
+    "related": ["compiler-libc-start-main", "compiler-security-check-cookie"],
+    "tags": ["CRT startup", "entry point", "mainCRTStartup", "real main", "MSVC runtime", "진짜 main 찾기"],
+    "sources": [
+      { "title": "Microsoft Learn - CRT initialization", "url": "https://learn.microsoft.com/cpp/c-runtime-library/crt-initialization" }
+    ]
+  }
+]

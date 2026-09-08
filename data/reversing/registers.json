@@ -1,0 +1,198 @@
+[
+  {
+    "id": "reg-rax",
+    "type": "register",
+    "name": "rax",
+    "aliases": [],
+    "category": "register",
+    "platform": ["linux", "windows", "ida"],
+    "standard": "x86-64",
+    "signature": "",
+    "summary": "x86-64 범용 레지스터. 함수의 정수/포인터 반환값을 담는 데 사용되는 64비트 레지스터.",
+    "internals": "RAX(64비트) ⊃ EAX(하위 32비트) ⊃ AX(하위 16비트) ⊃ AL(하위 8비트) 관계의 서브 레지스터 계층 구조를 가진다. AH는 AX의 상위 바이트(비트 8~15)를 가리키는 별도 별칭이다. 즉 mov al, 1 은 RAX 전체 중 최하위 1바이트만 바꾸고 나머지 63비트는 그대로 두지만, mov eax, 1 처럼 32비트 레지스터에 쓰면 상위 32비트가 자동으로 0으로 클리어된다(zero-extension).",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "System V AMD64 ABI(Linux/macOS)와 Microsoft x64 ABI(Windows) 양쪽 모두에서 정수/포인터 타입의 함수 반환값은 항상 RAX(32비트 반환이면 EAX)에 담긴다. 따라서 디스어셈블리/디컴파일 코드에서 `call` 직후 곧바로 `mov [rbp-x], eax` 또는 `mov [rbp-x], rax` 가 나오면, 이는 방금 호출한 함수의 반환값을 지역 변수에 저장하는 매우 흔한 패턴이다. 이 패턴을 놓치면 함수의 반환값 처리 로직(성공/실패 판정, 포인터 저장 등)을 잘못 해석하게 된다.",
+      "decompiler_pattern": "call sub_401000\nmov [rbp-8], eax   ; eax = sub_401000()의 반환값을 지역변수에 저장",
+      "ida_example": "v1 = sub_401000(a1);\nif ( v1 == -1 )\n  return 0;"
+    },
+    "pitfalls": [
+      "RAX는 함수 호출 시 caller-saved(휘발성) 레지스터다 - 호출된 함수 내부에서 자유롭게 덮어써도 되며, 호출자는 call 직후 즉시 값을 사용하거나 저장해야 한다.",
+      "반환 타입이 void거나 반환값을 쓰지 않는 함수라면 RAX에 의미 없는 쓰레기 값이 남아있을 수 있다 - eax를 읽는 코드가 없다면 반환값을 실제로 쓰지 않는다는 뜻이다."
+    ],
+    "related": ["reg-eax", "reg-ax", "reg-al", "reg-ah", "reg-rbx", "conv-fastcall", "conv-cdecl"],
+    "tags": ["general purpose register", "return value", "calling convention", "rax", "accumulator", "x86-64 register"],
+    "sources": [{ "title": "Intel 64 and IA-32 Architectures Software Developer Manuals", "url": "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" }]
+  },
+  {
+    "id": "reg-eax",
+    "type": "register",
+    "name": "eax",
+    "aliases": [],
+    "category": "register",
+    "platform": ["linux", "windows", "ida"],
+    "standard": "x86-64",
+    "signature": "",
+    "summary": "RAX의 하위 32비트를 가리키는 서브 레지스터. 32비트 정수 연산과 함수 반환값(int 등)에 널리 쓰인다.",
+    "internals": "EAX는 RAX의 최하위 4바이트다. x86-64의 중요한 특징으로, 32비트 범용 레지스터(eax 등)에 값을 쓰면 상위 32비트가 자동으로 0으로 클리어된다(zero-extension). 즉 `mov eax, 1` 을 실행하면 RAX 전체가 0x0000000000000001이 되며, 이는 16/8비트 서브 레지스터에 쓸 때(ax, al)는 발생하지 않는 x86-64 고유의 동작이다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "int를 반환하는 함수는 EAX만 유효하게 설정하고 RAX의 상위 32비트는 신경 쓰지 않는 경우가 많다(어차피 zero-extension으로 자동 클리어되므로). 디컴파일러가 `__int64` 타입을 보여주는데 실제로는 `mov eax, ...`만 쓰는 코드라면, 실질적으로 32비트 값만 의미 있다는 신호다.",
+      "decompiler_pattern": "mov eax, 1\nret\n; RAX 전체는 0x0000000000000001 (상위 32비트가 자동으로 0이 됨)",
+      "ida_example": "int __fastcall sub_401000(int a1)\n{\n  return a1 + 1; // eax = a1 + 1"
+    },
+    "pitfalls": [
+      "'32비트 레지스터에 쓰면 상위 32비트가 0으로 클리어된다'는 규칙은 16/8비트 서브 레지스터(ax, al, ah)에는 적용되지 않는다 - 그 경우 상위 비트는 이전 값이 그대로 남는다."
+    ],
+    "related": ["reg-rax", "reg-ax", "reg-al"],
+    "tags": ["general purpose register", "zero extension", "32-bit register", "eax", "return value"],
+    "sources": [{ "title": "Intel 64 and IA-32 Architectures Software Developer Manuals", "url": "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" }]
+  },
+  {
+    "id": "reg-ax",
+    "type": "register",
+    "name": "ax",
+    "aliases": [],
+    "category": "register",
+    "platform": ["linux", "windows", "ida"],
+    "standard": "x86-64",
+    "signature": "",
+    "summary": "EAX의 하위 16비트를 가리키는 서브 레지스터. 16비트(WORD) 값 연산에 쓰인다.",
+    "internals": "AX는 EAX(및 RAX)의 최하위 2바이트다. AX는 다시 AH(상위 바이트, 비트 8~15)와 AL(하위 바이트, 비트 0~7)로 나뉜다. EAX/RAX와 달리 AX에 값을 써도 상위 비트는 클리어되지 않고 그대로 유지된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "16비트 정수(short, WORD)를 다루는 코드나 레거시 16비트 호환 코드, 또는 특정 포트/프로토콜 필드가 16비트일 때 AX 레지스터가 명시적으로 등장한다. 현대 x86-64 코드에서는 상대적으로 드물게 보이지만, 16비트 상수 비교나 문자열 길이 필드 처리에서 나타날 수 있다.",
+      "decompiler_pattern": "mov ax, 0x1234\n; RAX/EAX의 하위 16비트만 변경, 상위 비트는 이전 값 유지",
+      "ida_example": "if ( (_WORD)v1 == 0x1234 )\n  return 1;"
+    },
+    "pitfalls": [
+      "AX에 값을 써도 EAX/RAX의 상위 비트가 클리어되지 않으므로, 이전에 남아있던 쓰레기 값과 섞여 예상치 못한 32/64비트 값이 만들어질 수 있다."
+    ],
+    "related": ["reg-eax", "reg-al", "reg-ah"],
+    "tags": ["general purpose register", "16-bit register", "word register", "ax"],
+    "sources": [{ "title": "Intel 64 and IA-32 Architectures Software Developer Manuals", "url": "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" }]
+  },
+  {
+    "id": "reg-al",
+    "type": "register",
+    "name": "al",
+    "aliases": [],
+    "category": "register",
+    "platform": ["linux", "windows", "ida"],
+    "standard": "x86-64",
+    "signature": "",
+    "summary": "AX의 하위 8비트를 가리키는 서브 레지스터. 1바이트 값(char, bool 등) 연산에 널리 쓰인다.",
+    "internals": "AL은 AX(및 EAX, RAX)의 최하위 1바이트다. bool을 반환하는 함수(C++의 bool, C의 조건식 결과)는 관례적으로 al 레지스터만 0 또는 1로 설정하고 나머지 상위 비트는 신경 쓰지 않는 경우가 많다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "`test al, al` / `cmp al, 0` 뒤에 `jz`/`jnz`가 오는 패턴은 bool을 반환하는 함수의 결과(참/거짓)를 검사하는 매우 흔한 관용구다. strcmp류 함수처럼 int를 반환하지만 실질적으로 0/비0만 검사하는 경우에도 al만 확인하는 코드가 생성될 수 있다.",
+      "decompiler_pattern": "call sub_401500\ntest al, al\njz short loc_401234   ; al == 0 이면 분기 (bool 반환값이 false인 경우)",
+      "ida_example": "if ( !sub_401500(a1) )\n  return 0;"
+    },
+    "pitfalls": [
+      "al만 설정하고 rax의 나머지 상위 바이트는 정의되지 않은 채로 남아있을 수 있다 - bool 반환 함수를 int로 착각해서 반환값 전체를 신뢰하면 안 된다."
+    ],
+    "related": ["reg-ax", "reg-ah", "reg-eax"],
+    "tags": ["general purpose register", "8-bit register", "byte register", "al", "boolean return"],
+    "sources": [{ "title": "Intel 64 and IA-32 Architectures Software Developer Manuals", "url": "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" }]
+  },
+  {
+    "id": "reg-ah",
+    "type": "register",
+    "name": "ah",
+    "aliases": [],
+    "category": "register",
+    "platform": ["linux", "windows", "ida"],
+    "standard": "x86-64",
+    "signature": "",
+    "summary": "AX의 상위 8비트(비트 8~15)를 가리키는 레거시 서브 레지스터.",
+    "internals": "AH는 AX 레지스터를 상/하위 바이트로 나눴을 때 상위 바이트를 뜻한다(AL이 하위 바이트). x86의 오래된 레지스터 인코딩 방식으로, r8~r15 같은 x86-64에서 새로 추가된 범용 레지스터들에는 이런 상위 8비트 별칭(AH에 대응하는 것)이 존재하지 않는다는 중요한 차이가 있다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "현대 x86-64 컴파일러가 생성하는 코드에서는 ah가 자주 나오지 않지만, 특정 레거시 연산(예: 8비트 곱셈/나눗셈에서 AH가 몫/나머지 상위 바이트를 담는 경우, lahf/sahf 명령)이나 손으로 최적화한 코드, CTF의 의도적으로 난독화된 셸코드에서 마주칠 수 있다.",
+      "decompiler_pattern": "mov ah, 0x10\n; AX의 상위 바이트만 변경, AL과 EAX/RAX의 다른 비트는 그대로",
+      "ida_example": "HIBYTE(v1) = 0x10; // ah에 대응하는 위치를 직접 수정하는 디컴파일 표현"
+    },
+    "pitfalls": [
+      "AH, BH, CH, DH 같은 상위 8비트 레지스터는 REX 프리픽스가 붙은 명령(예: 64비트 레지스터를 사용하는 명령)과 함께 인코딩할 수 없다는 x86-64 인코딩 제약이 있다.",
+      "r8b~r15b(r8~r15의 하위 8비트)에는 ah 같은 '상위 바이트' 별칭이 아예 존재하지 않는다 - 오직 원래의 al/bl/cl/dl 계열에만 상위 바이트 별칭(ah/bh/ch/dh)이 있다."
+    ],
+    "related": ["reg-ax", "reg-al", "reg-eax"],
+    "tags": ["general purpose register", "8-bit register", "legacy register", "ah", "high byte alias"],
+    "sources": [{ "title": "Intel 64 and IA-32 Architectures Software Developer Manuals", "url": "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" }]
+  },
+  {
+    "id": "reg-rbx",
+    "type": "register",
+    "name": "rbx",
+    "aliases": ["ebx"],
+    "category": "register",
+    "platform": ["linux", "windows", "ida"],
+    "standard": "x86-64",
+    "signature": "",
+    "summary": "callee-saved(비휘발성) 범용 레지스터. 호출된 함수가 값을 보존해야 하는 몇 안 되는 범용 레지스터 중 하나.",
+    "internals": "System V AMD64 ABI와 Microsoft x64 ABI 모두에서 RBX는 callee-saved로 분류된다 - 함수가 RBX를 내부적으로 사용하려면 진입 시 push rbx로 원래 값을 스택에 저장하고, 종료 직전 pop rbx로 복원해야 한다. RSP, RBP와 함께 대표적인 비휘발성 레지스터군에 속한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "함수 프롤로그에서 `push rbx`, 에필로그에서 `pop rbx`가 짝을 이루어 나타나는 것을 보면 그 함수가 내부에서 RBX를 범용 임시 변수(주로 루프 카운터나 반복 사용되는 포인터)로 재사용하고 있다는 신호다. push된 레지스터 목록(rbx, r12~r15 등)을 보면 그 함수가 얼마나 많은 '오래 사는' 지역 변수를 레지스터에 유지하는지 가늠할 수 있다.",
+      "decompiler_pattern": "push rbx\n...\nmov rbx, rdi      ; rbx를 인자 저장용 임시 변수로 재사용\n...\npop rbx\nret",
+      "ida_example": "__int64 __fastcall sub_401000(__int64 a1)\n{\n  v1 = a1; // 실제로는 rbx에 저장되어 함수 내내 보존됨\n  ...\n}"
+    },
+    "pitfalls": [
+      "RBX가 함수 앞부분에서 push되었다면, 그 함수 내에서 RBX 값이 인자나 다른 값으로 바뀌어도 함수를 호출한 쪽의 원래 RBX 값에는 영향이 없다 - caller 관점에서 RBX는 항상 보존된다고 가정해도 된다."
+    ],
+    "related": ["reg-rax", "pattern-stack-frame", "reg-rbp"],
+    "tags": ["general purpose register", "callee-saved", "non-volatile register", "rbx", "push pop"],
+    "sources": [{ "title": "Intel 64 and IA-32 Architectures Software Developer Manuals", "url": "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" }]
+  },
+  {
+    "id": "reg-rip",
+    "type": "register",
+    "name": "rip",
+    "aliases": ["instruction pointer", "program counter"],
+    "category": "register",
+    "platform": ["linux", "windows", "ida"],
+    "standard": "x86-64",
+    "signature": "",
+    "summary": "다음에 실행할 명령어의 메모리 주소를 가리키는 64비트 명령어 포인터 레지스터. 범용 레지스터처럼 직접 mov 대상이 될 수 없다.",
+    "internals": "RIP은 CPU가 매 명령어를 페치할 때마다 자동으로 갱신되며, jmp/call/ret 등의 제어 흐름 명령을 통해서만 간접적으로 바뀐다. x86-64에서 도입된 RIP-relative addressing은 `lea rax, [rip+0x2000]` 처럼 현재 명령어 주소를 기준으로 한 상대 오프셋으로 데이터를 참조하는 방식이다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "RIP-relative addressing은 위치 독립 실행 파일(PIE, Position Independent Executable)과 공유 라이브러리에서 전역 변수/문자열 리터럴에 접근할 때 표준적으로 쓰인다. ASLR이 걸린 바이너리를 정적 분석할 때 IDA/Ghidra가 보여주는 절대 주소는 로드 베이스가 바뀌면 달라지므로, `[rip+offset]` 형태를 보면 실제 런타임 주소는 '현재 명령어 주소 + offset'으로 계산해야 한다는 점을 항상 기억해야 한다.",
+      "decompiler_pattern": "lea rax, [rip+0x2ed5]   ; rax = (다음 명령어 주소) + 0x2ed5, 보통 전역 변수/문자열 주소\nmov edi, eax",
+      "ida_example": "printf(&format); // IDA는 rip-relative lea를 이미 절대 주소(심볼)로 재계산해서 보여준다"
+    },
+    "pitfalls": [
+      "RIP은 mov rip, ... 처럼 직접 값을 대입할 수 없는 레지스터다 - 값을 바꾸려면 반드시 jmp/call/ret/조건 분기 등 제어 흐름 명령을 통해야 한다.",
+      "디스어셈블러가 보여주는 `[rip+0x1234]`의 오프셋은 '현재 명령어의 시작 주소'가 아니라 '다음 명령어의 주소'(즉 해당 명령어 인코딩이 끝나는 지점)를 기준으로 계산된다는 점을 착각하기 쉽다."
+    ],
+    "related": ["reg-rsp", "reg-rbp"],
+    "tags": ["instruction pointer", "rip relative addressing", "pie", "aslr", "position independent code", "program counter"],
+    "sources": [{ "title": "Intel 64 and IA-32 Architectures Software Developer Manuals", "url": "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" }]
+  },
+  {
+    "id": "reg-rflags",
+    "type": "register",
+    "name": "rflags",
+    "aliases": ["eflags", "flags register"],
+    "category": "register",
+    "platform": ["linux", "windows", "ida"],
+    "standard": "x86-64",
+    "signature": "",
+    "summary": "산술/논리 연산 결과에 따라 자동으로 설정되는 상태 플래그 레지스터. cmp/test 이후 조건 분기(jcc) 판단의 근거가 된다.",
+    "internals": "RFLAGS의 하위 32비트가 EFLAGS이며, 리버싱에서 가장 중요한 4개 플래그는 다음과 같다: ZF(Zero Flag, 연산 결과가 0이면 1로 설정 - cmp a,b 후 jz/je는 사실상 'a==b이면 분기'), CF(Carry Flag, 부호 없는 연산에서 자리올림/빌림 발생 시 설정 - jb/ja 계열 분기의 기준), SF(Sign Flag, 결과의 최상위 비트를 그대로 반영 - 결과가 음수처럼 보이는지), OF(Overflow Flag, 부호 있는 연산에서 오버플로우 발생 시 설정 - jg/jl 계열 분기의 기준).",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "`cmp`/`test` 명령 자체는 값을 바꾸지 않고 오직 플래그만 설정하며, 바로 뒤따르는 `jz`/`jnz`/`jg`/`jl`/`ja`/`jb` 등 조건 분기(jcc)가 실제 비교 결과에 따른 분기를 수행한다. 디컴파일러는 이 cmp+jcc 쌍을 `if (a == b)`, `if (a > b)` 같은 고수준 조건문으로 복원해 보여주므로, 어셈블리를 직접 읽을 때는 어떤 플래그가 어떤 jcc와 짝을 이루는지 아는 것이 조건의 실제 의미(부호 있는 비교인지 없는 비교인지 포함)를 파악하는 데 필수적이다.",
+      "decompiler_pattern": "cmp eax, 10\njg loc_401050    ; SF/OF 조합을 검사, eax > 10(부호 있는 비교)이면 분기\n; 디컴파일 결과: if ( v1 > 10 ) goto ...;",
+      "ida_example": "if ( v1 > 10 )\n  sub_401050();"
+    },
+    "pitfalls": [
+      "jg/jl(부호 있는 비교, SF/OF 기반)과 ja/jb(부호 없는 비교, CF 기반)는 같은 cmp 결과라도 피연산자를 signed로 보느냐 unsigned로 보느냐에 따라 전혀 다른 분기를 만든다 - jcc 종류를 보면 원본 변수의 타입(signed/unsigned)을 역으로 추론할 수 있다.",
+      "test reg, reg 는 reg & reg 결과로 플래그만 설정하는 관용구로, 사실상 'reg가 0인지' 또는 'reg가 음수인지'를 검사하는 데 쓰이며 실제 AND 연산 결과를 저장하려는 목적이 아니다."
+    ],
+    "related": ["reg-rax", "reg-rip"],
+    "tags": ["flags register", "zero flag", "carry flag", "sign flag", "overflow flag", "conditional jump", "cmp", "test instruction"],
+    "sources": [{ "title": "Intel 64 and IA-32 Architectures Software Developer Manuals", "url": "https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html" }]
+  }
+]

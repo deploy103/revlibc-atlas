@@ -1,0 +1,158 @@
+[
+  {
+    "id": "pattern-rol-ror",
+    "type": "pattern",
+    "name": "ROL/ROR (bit rotate)",
+    "aliases": [
+      "rotate left",
+      "rotate right",
+      "circular shift",
+      "bit rotation",
+      "ROL/ROR"
+    ],
+    "category": "pattern",
+    "platform": [
+      "c",
+      "linux",
+      "windows"
+    ],
+    "standard": "",
+    "signature": "",
+    "summary": "값을 벗어나는 비트를 반대쪽으로 순환시키며 좌/우로 이동시키는 비트 순환(rotate) 연산.",
+    "internals": "일반 쉬프트(<<, >>)는 밀려난 비트를 버리지만, 회전(rotate)은 밀려난 비트를 반대쪽 끝으로 다시 채워 넣는다. C 표준에는 rotate 전용 연산자가 없기 때문에 컴파일러/개발자는 두 개의 쉬프트와 OR로 이를 흉내낸다: 32비트 값 x를 n비트 좌회전하면 `(x << n) | (x >> (32 - n))`, 우회전이면 `(x >> n) | (x << (32 - n))` 형태가 된다. n이 0이거나 32(레지스터 폭)와 같을 때 `x >> 32` 같은 정의되지 않은 동작(UB)을 피하기 위해 `n &= 31` 마스킹이 함께 보이기도 한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "디컴파일러 출력에서 `(x << n) | (x >> (32 - n))` 또는 `(x >> n) | (x << (32 - n))` 형태, 혹은 `__ROL4__`/`__ROR4__`/`_rotl`/`_rotr` 같은 컴파일러 내장 함수 호출이 보이면 비트 회전일 가능성이 매우 높다. SHA-1, MD5, RC5/RC6, 다양한 커스텀 CTF 암호화 루틴에서 확산(diffusion)을 위해 자주 쓰인다. x86/x64에는 ROL/ROR 명령어가 하드웨어 레벨로 존재하기 때문에, 컴파일 최적화가 걸리면 어셈블리에서는 저 복잡한 C 표현이 단 한 줄의 `rol`/`ror` 명령으로 압축되어 보일 수 있다 - 디스어셈블리만 보고 있다면 이 한 줄짜리 명령을 놓치지 않아야 한다.",
+      "decompiler_pattern": "unsigned int rotl32(unsigned int x, int n) {\n  return (x << n) | (x >> (32 - n));\n}",
+      "ida_example": "v3 = __ROL4__(v2, 7);\n; 또는 최적화된 x86 어셈블리에서는\nrol eax, 7"
+    },
+    "pitfalls": [
+      "쉬프트 연산(<<, >>)과 회전 연산을 혼동하기 쉽다 - 쉬프트는 비트를 버리지만 회전은 버리지 않고 반대쪽으로 되돌려 넣는다.",
+      "회전량 n이 0이거나 레지스터 폭(32/64)과 같을 때 `x >> (32 - n)`이 `x >> 32`가 되어 C에서 정의되지 않은 동작(UB)을 유발할 수 있다 - 실제 구현은 흔히 `n & 31` 마스킹을 동반한다.",
+      "좌회전과 우회전 방향을 반대로 착각하면 해시/암호 로직을 반대로 구현하게 된다."
+    ],
+    "related": [
+      "crypto-sha1",
+      "crypto-md5",
+      "pattern-byte-swap"
+    ],
+    "tags": [
+      "rol",
+      "ror",
+      "rotate",
+      "rotl",
+      "rotr",
+      "bit rotation",
+      "circular shift",
+      "__ROL4__",
+      "_rotl"
+    ],
+    "sources": [
+      {
+        "title": "cppreference - Bitwise operators",
+        "url": "https://en.cppreference.com/w/c/language/operator_arithmetic"
+      }
+    ]
+  },
+  {
+    "id": "pattern-byte-swap",
+    "type": "pattern",
+    "name": "byte swap / bswap",
+    "aliases": [
+      "bswap",
+      "endian swap",
+      "byte reversal",
+      "__builtin_bswap32",
+      "htonl/ntohl"
+    ],
+    "category": "pattern",
+    "platform": [
+      "c",
+      "linux",
+      "windows"
+    ],
+    "standard": "",
+    "signature": "",
+    "summary": "4바이트 또는 8바이트 정수 값의 바이트 순서를 뒤집어 리틀엔디안과 빅엔디안 표현을 서로 변환하는 연산.",
+    "internals": "32비트 값 하나를 바이트 단위로 뒤집는 전형적인 수동 구현은 `((x & 0xFF) << 24) | ((x & 0xFF00) << 8) | ((x >> 8) & 0xFF00) | ((x >> 24) & 0xFF)` 같은 쉬프트/마스크 조합으로 나타난다. 표준 라이브러리 레벨에서는 GCC/Clang의 `__builtin_bswap16/32/64`, MSVC의 `_byteswap_ushort/ulong/uint64`, 또는 POSIX/BSD 소켓 계열의 `htons/htonl/ntohs/ntohl`(네트워크 바이트 순서인 빅엔디안 <-> 호스트 바이트 순서 변환)로 나타난다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "x86/x64에는 `bswap` 전용 명령어가 있어, 최적화된 바이너리에서는 복잡한 쉬프트/마스크 C 코드 대신 어셈블리 한 줄(`bswap eax`)로 보일 수 있다. 네트워크 프로토콜 파싱(패킷 헤더 필드), 파일 포맷 매직 넘버 비교(예: PNG/ELF 헤더를 빅엔디안으로 저장하는 포맷), 크로스 플랫폼 직렬화 코드에서 흔히 등장한다. `htonl`/`ntohl` 호출이 보이면 네트워크 바이트 순서 변환이 이루어지고 있다는 강한 지표다.",
+      "decompiler_pattern": "unsigned int bswap32(unsigned int x) {\n  return ((x & 0xFF) << 24) | ((x & 0xFF00) << 8) |\n         ((x >> 8) & 0xFF00) | ((x >> 24) & 0xFF);\n}\n; 또는\nresult = __builtin_bswap32(v);",
+      "ida_example": "v2 = _byteswap_ulong(v1);\n; 또는 x86 어셈블리에서는\nbswap eax"
+    },
+    "pitfalls": [
+      "bswap은 항상 4바이트/8바이트 전체를 뒤집는 것이지, 회전(rotate)이나 임의 폭 쉬프트와는 다른 연산이다 - ROL/ROR 패턴과 혼동하지 않아야 한다.",
+      "`htonl`/`ntohl`은 호스트가 이미 빅엔디안이면 아무 것도 하지 않는 매크로/함수로 컴파일될 수 있어, x86(리틀엔디안) 전용으로 분석 중이라면 항상 바이트가 뒤집힌다고 가정해도 되지만 이식성 코드에서는 단정할 수 없다."
+    ],
+    "related": [
+      "pattern-endianness",
+      "pattern-rol-ror"
+    ],
+    "tags": [
+      "bswap",
+      "byte swap",
+      "endian",
+      "__builtin_bswap32",
+      "_byteswap_ulong",
+      "htonl",
+      "ntohl"
+    ],
+    "sources": [
+      {
+        "title": "cppreference - Byte order conversions",
+        "url": "https://en.cppreference.com/w/cpp/numeric/byteswap"
+      }
+    ]
+  },
+  {
+    "id": "pattern-endianness",
+    "type": "pattern",
+    "name": "little endian / big endian",
+    "aliases": [
+      "endianness",
+      "byte order",
+      "LE",
+      "BE"
+    ],
+    "category": "pattern",
+    "platform": [
+      "c",
+      "linux",
+      "windows"
+    ],
+    "standard": "",
+    "signature": "",
+    "summary": "멀티바이트 정수 값을 메모리에 저장할 때 최하위 바이트부터 저장하는지(리틀엔디안) 최상위 바이트부터 저장하는지(빅엔디안)를 결정하는 규칙.",
+    "internals": "리틀엔디안(little endian)은 최하위 유효 바이트(LSB)를 가장 낮은 메모리 주소에 저장하고, 빅엔디안(big endian)은 최상위 유효 바이트(MSB)를 가장 낮은 메모리 주소에 저장한다. x86과 x64는 리틀엔디안이므로, 소스 코드에 `0x6A09E667` (SHA-256의 첫 초기 해시 상수 H0[0], crypto-sha256-h0 참고) 이라고 32비트 값으로 적더라도, 실제로 메모리/hexdump에서는 바이트 순서가 뒤집혀 `67 E6 09 6A` 순서로 나타난다. 반대로 네트워크 프로토콜이나 일부 파일 포맷(JPEG, ELF의 일부 필드 등)은 빅엔디안(네트워크 바이트 순서)을 사용해 값을 그대로 `6A 09 E6 67` 순서로 저장한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "hexdump나 IDA의 데이터 뷰에서 바이트 나열이 잘 알려진 매직 상수와 일치하지 않는 것처럼 보여도, 4바이트 단위로 순서를 거꾸로 읽으면(리틀엔디안 가정) 익숙한 상수(SHA-256 H0, MD5 IV 등)로 드러나는 경우가 매우 흔하다. 이는 분석자가 매직 넘버를 못 알아보는 대표적인 원인이므로, 상수를 검색할 때는 원래 순서와 바이트 반전 순서 둘 다 확인해야 한다.",
+      "decompiler_pattern": "unsigned char buf[4] = { 0x67, 0xE6, 0x09, 0x6A }; // 메모리상의 바이트 순서\n// 리틀엔디안 CPU에서 이를 uint32_t로 읽으면 0x6A09E667 이 된다",
+      "ida_example": ".data:00000000 dd 6A09E667h   ; 디스어셈블리는 값을 사람이 읽기 좋은 순서로 보여주지만\n.data:00000000 db 67h, 0E6h, 09h, 6Ah  ; 실제 바이트 나열은 이렇게 뒤집혀 있다"
+    },
+    "pitfalls": [
+      "hexdump에서 매직 넘버를 못 알아보는 가장 흔한 원인이 바로 엔디안 반전이다 - 상수를 찾을 때 원래 순서뿐 아니라 4바이트/8바이트 단위로 뒤집은 값도 함께 검색해야 한다.",
+      "x86/x64가 리틀엔디안이라고 해서 그 위에서 동작하는 모든 데이터 포맷도 리틀엔디안이라고 단정할 수 없다 - 네트워크 프로토콜, 일부 이미지/폰트 포맷은 빅엔디안 필드를 섞어 쓴다.",
+      "멀티바이트 정수 전체가 아니라 문자열(바이트 배열)은 엔디안의 영향을 받지 않는다 - 이 둘을 혼동하면 잘못된 바이트 반전을 시도하게 된다."
+    ],
+    "related": [
+      "pattern-byte-swap",
+      "crypto-sha256-h0"
+    ],
+    "tags": [
+      "endianness",
+      "little endian",
+      "big endian",
+      "byte order",
+      "hexdump",
+      "magic number"
+    ],
+    "sources": [
+      {
+        "title": "cppreference - Endianness (std::endian)",
+        "url": "https://en.cppreference.com/w/cpp/types/endian"
+      }
+    ]
+  }
+]

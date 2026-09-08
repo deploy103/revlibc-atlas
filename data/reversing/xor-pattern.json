@@ -1,0 +1,27 @@
+[
+  {
+    "id": "pattern-xor-loop",
+    "type": "pattern",
+    "name": "XOR loop",
+    "aliases": ["^", "^=", "xor", "xor cipher", "xor encryption"],
+    "category": "pattern",
+    "platform": ["c", "linux", "windows"],
+    "standard": "",
+    "signature": "",
+    "summary": "바이트 단위로 XOR을 반복 적용해 데이터를 인코딩/디코딩(또는 대칭적으로 암복호화)하는 매우 흔한 패턴.",
+    "internals": "`a ^= b;` 는 `a = a ^ b;` 의 축약형이다 (거듭제곱이 아니다). XOR은 같은 키로 두 번 적용하면 원래 값으로 되돌아오는 대합(involution) 성질이 있어 `enc = data ^ key; dec = enc ^ key;` 처럼 인코딩/디코딩에 동일한 코드를 재사용할 수 있다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "`*(_BYTE *)(v8 + i) ^= v1[i];` 같은 코드는 버퍼 v8의 각 바이트를 키 배열 v1의 대응 바이트와 XOR하는 전형적인 스트림 XOR 루프다. CTF에서 간단한 인코딩, 셸코드 난독화, 문자열/설정 값 숨기기, mprotect로 RWX를 만든 뒤 복호화하는 unpacking 루틴에 매우 자주 쓰인다. 키가 짧고 반복되면(i % keylen) 고전적인 반복 키 XOR로 볼 수 있다.",
+      "decompiler_pattern": "for ( i = 0; i < len; ++i )\n  *(_BYTE *)(v8 + i) ^= v1[i % keylen];",
+      "ida_example": "for ( i = 0; i < n; ++i )\n    buf[i] ^= key[i % key_len];"
+    },
+    "pitfalls": [
+      "`a ^= b` 를 `a = a ^ b`가 아니라 거듭제곱으로 착각하는 실수가 흔하다(다른 언어의 `**`나 `^` 의미와 혼동).",
+      "키 길이가 1바이트인 단순 XOR은 빈도 분석(가장 흔한 바이트 = 원문의 공백/널과 XOR한 값)만으로도 키를 복구할 수 있다."
+    ],
+    "related": ["posix-mprotect", "c-memcpy", "ida-_byte"],
+    "tags": ["xor", "^", "^=", "stream cipher", "obfuscation", "rolling key", "unpacking"],
+    "sources": [{ "title": "cppreference - Bitwise operators", "url": "https://en.cppreference.com/w/c/language/operator_arithmetic" }]
+  }
+]
