@@ -1,0 +1,31 @@
+[
+  {
+    "id": "crypto-fnv",
+    "type": "constant_group",
+    "name": "FNV prime / offset basis (32-bit)",
+    "aliases": ["FNV-1", "FNV-1a", "Fowler-Noll-Vo"],
+    "category": "hash",
+    "platform": ["c", "linux", "windows"],
+    "standard": "FNV (비공식, isthe.com 레퍼런스)",
+    "signature": "",
+    "summary": "FNV(Fowler-Noll-Vo) 계열 해시 함수에서 흔히 쓰이는 32비트 소수(prime)와 오프셋 베이시스 상수. 변형 구현이 매우 많아 이 상수만으로 FNV라고 단정할 수는 없다.",
+    "numeric_constants": [
+      { "decimal": 16777619, "hex": "0x01000193", "label": "FNV 32-bit prime" },
+      { "decimal": 2166136261, "hex": "0x811C9DC5", "label": "FNV 32-bit offset basis" }
+    ],
+    "internals": "FNV-1은 각 바이트에 대해 `hash = (hash * FNV_prime) ^ byte` 순서로, FNV-1a는 곱셈과 XOR 순서를 바꿔 `hash = (hash ^ byte) * FNV_prime` 순서로 처리한다. 두 방식 모두 초기값(offset basis)과 곱셈 상수(prime)로 위 32비트 값을 기본으로 사용한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "루프 안에서 곱셈 상수로 16777619(0x01000193)가 보이고 초기값으로 2166136261(0x811C9DC5)이 쓰이면 FNV 계열 해시일 가능성이 높다. 다만 CTF 문제에서는 상수만 가져오고 로직은 변형한 'FNV 스타일' 커스텀 해시도 흔하므로, 곱셈/XOR 순서가 표준 FNV-1/FNV-1a와 정확히 같은지 별도로 확인해야 한다 - 상수 일치만으로 알고리즘 전체를 단정하지 않는다.",
+      "decompiler_pattern": "hash = 2166136261;\nfor ( i = 0; i < len; ++i )\n{\n  hash ^= s[i];\n  hash *= 16777619;\n}",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "FNV-1과 FNV-1a는 XOR과 곱셈의 순서만 다르다 - 순서를 혼동하면 다른 해시 결과가 나온다.",
+      "64비트 버전은 서로 다른 prime(0x100000001B3)과 offset basis(0xCBF29CE484222325)를 사용한다."
+    ],
+    "related": ["crypto-sha256-h0", "pattern-xor-loop"],
+    "tags": ["fnv", "fnv-1", "fnv-1a", "hash", "magic constant", "non-cryptographic hash", "16777619"],
+    "sources": [{ "title": "FNV Hash - reference description (isthe.com)", "url": "http://www.isthe.com/chongo/tech/comp/fnv/" }]
+  }
+]

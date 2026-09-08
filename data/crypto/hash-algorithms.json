@@ -1,0 +1,414 @@
+[
+  {
+    "id": "crypto-md5",
+    "type": "constant_group",
+    "name": "MD5 initial state (A/B/C/D)",
+    "aliases": ["MD5 IV", "MD5 initial vector"],
+    "category": "crypto",
+    "platform": ["c", "linux", "windows"],
+    "standard": "RFC 1321",
+    "signature": "",
+    "summary": "MD5가 사용하는 4개의 32비트 초기 상태 값 A, B, C, D.",
+    "numeric_constants": [
+      { "decimal": 1732584193, "hex": "0x67452301", "label": "MD5 A" },
+      { "decimal": 4023233417, "hex": "0xEFCDAB89", "label": "MD5 B" },
+      { "decimal": 2562383102, "hex": "0x98BADCFE", "label": "MD5 C" },
+      { "decimal": 271733878, "hex": "0x10325476", "label": "MD5 D" }
+    ],
+    "internals": "MD5는 128비트 상태를 4개의 32비트 워드(A, B, C, D)로 나누어 관리하며, RFC 1321에 정의된 이 고정값으로 초기화한 뒤 512비트 메시지 블록마다 4라운드(각 16단계, 총 64단계)의 비선형 함수와 덧셈, 회전(rotate)을 반복 적용한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "바이너리에서 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476 네 값이 연속으로 초기화되는 코드가 보이면 MD5 구현일 가능성이 매우 높다. 다만 초기값만으로는 이후 64단계 로직까지 표준 MD5와 동일한지 단정할 수 없으며, 라운드별 사인 테이블(T[1..64]) 상수까지 함께 확인하면 신뢰도가 더 높아진다.",
+      "decompiler_pattern": "unsigned int a = 0x67452301, b = 0xEFCDAB89, c = 0x98BADCFE, d = 0x10325476;",
+      "ida_example": "a0 = 0x67452301;\na1 = 0xEFCDAB89;\na2 = 0x98BADCFE;\na3 = 0x10325476;"
+    },
+    "pitfalls": [
+      "SHA-1의 초기값 h0~h3(0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476)이 MD5의 A~D와 앞 4개가 완전히 동일하다 - h4(0xC3D2E1F0)가 추가로 존재하는지, 워드가 4개인지 5개인지로 구분해야 한다.",
+      "MD5는 더 이상 충돌 저항성이 없는 것으로 알려져 있지만, CTF에서는 checksum/무결성 검증 용도로 여전히 자주 등장한다는 점만 참고하고 보안적 결론은 별도로 단정하지 않는다."
+    ],
+    "related": ["crypto-sha1", "pattern-rol-ror"],
+    "tags": ["md5", "hash", "magic constant", "rfc 1321", "initial state", "67452301"],
+    "sources": [{ "title": "RFC 1321 - The MD5 Message-Digest Algorithm", "url": "https://www.rfc-editor.org/rfc/rfc1321" }]
+  },
+  {
+    "id": "crypto-sha1",
+    "type": "constant_group",
+    "name": "SHA-1 initial hash values (h0~h4)",
+    "aliases": ["SHA-1 IV", "SHA1 initial state"],
+    "category": "crypto",
+    "platform": ["c", "linux", "windows"],
+    "standard": "NIST FIPS 180-4",
+    "signature": "",
+    "summary": "SHA-1이 사용하는 5개의 32비트 초기 해시 값 h0, h1, h2, h3, h4.",
+    "numeric_constants": [
+      { "decimal": 1732584193, "hex": "0x67452301", "label": "SHA-1 h0" },
+      { "decimal": 4023233417, "hex": "0xEFCDAB89", "label": "SHA-1 h1" },
+      { "decimal": 2562383102, "hex": "0x98BADCFE", "label": "SHA-1 h2" },
+      { "decimal": 271733878, "hex": "0x10325476", "label": "SHA-1 h3" },
+      { "decimal": 3285377520, "hex": "0xC3D2E1F0", "label": "SHA-1 h4" }
+    ],
+    "internals": "SHA-1은 160비트 상태를 5개의 32비트 워드(h0~h4)로 관리하며, 이 고정값으로 초기화한 뒤 512비트 블록마다 80단계(4라운드 x 20단계)의 압축 함수를 적용한다. 각 단계는 비선형 함수, 덧셈, 그리고 5비트 좌회전(ROL)을 사용한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 다섯 값이 함께 초기화되면 SHA-1일 가능성이 매우 높다. 앞의 4개만 보이고 5번째(0xC3D2E1F0)가 없다면 MD5일 가능성도 함께 고려해야 한다 - 워드 개수(4개 vs 5개)로 구분하는 것이 안전하다.",
+      "decompiler_pattern": "unsigned int h[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };",
+      "ida_example": "h0 = 0x67452301;\nh1 = 0xEFCDAB89;\nh2 = 0x98BADCFE;\nh3 = 0x10325476;\nh4 = 0xC3D2E1F0;"
+    },
+    "pitfalls": [
+      "MD5의 A~D와 SHA-1의 h0~h3가 완전히 동일한 값이다 - h4(0xC3D2E1F0)의 존재 여부와 워드 개수(4개인지 5개인지)로 구분해야 하며, 초기값 4개만으로는 MD5인지 SHA-1인지 단정할 수 없다.",
+      "SHA-1은 실무에서 충돌 공격이 보고된 바 있어 신규 보안 용도로는 권장되지 않지만, CTF의 체크섬/식별 용도로는 흔히 등장한다."
+    ],
+    "related": ["crypto-md5", "pattern-rol-ror"],
+    "tags": ["sha1", "sha-1", "hash", "magic constant", "fips 180-4", "initial hash value", "67452301"],
+    "sources": [{ "title": "NIST FIPS 180-4 - Secure Hash Standard", "url": "https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf" }]
+  },
+  {
+    "id": "crypto-sha224",
+    "type": "constant_group",
+    "name": "SHA-224 initial hash values",
+    "aliases": ["SHA-224 IV"],
+    "category": "crypto",
+    "platform": ["c", "linux", "windows"],
+    "standard": "NIST FIPS 180-4",
+    "signature": "",
+    "summary": "SHA-224가 사용하는 8개의 32비트 초기 해시 값. 압축 함수는 SHA-256과 동일하지만 초기값이 다르다.",
+    "numeric_constants": [
+      { "decimal": 3238371032, "hex": "0xC1059ED8", "label": "SHA-224 H0[0]" },
+      { "decimal": 914150663, "hex": "0x367CD507", "label": "SHA-224 H0[1]" },
+      { "decimal": 812702999, "hex": "0x3070DD17", "label": "SHA-224 H0[2]" },
+      { "decimal": 4144912697, "hex": "0xF70E5939", "label": "SHA-224 H0[3]" },
+      { "decimal": 4290775857, "hex": "0xFFC00B31", "label": "SHA-224 H0[4]" },
+      { "decimal": 1750603025, "hex": "0x68581511", "label": "SHA-224 H0[5]" },
+      { "decimal": 1694076839, "hex": "0x64F98FA7", "label": "SHA-224 H0[6]" },
+      { "decimal": 3204075428, "hex": "0xBEFA4FA4", "label": "SHA-224 H0[7]" }
+    ],
+    "internals": "SHA-224는 SHA-256과 완전히 동일한 압축 함수, 라운드 상수(K, 64개), 메시지 스케줄을 사용하지만 초기 해시값(H0)이 다르며, 최종 출력에서 마지막 32비트 워드(H[7])를 잘라내 224비트 다이제스트를 만든다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "0xC1059ED8로 시작하는 8개의 32비트 상수 나열이 보이면 SHA-224일 가능성이 매우 높다. crypto-sha256-h0(0x6A09E667로 시작)과 값이 완전히 다르므로, 두 상수 집합을 혼동하지 않아야 한다 - SHA-256 상수라고 착각한 채 분석을 진행하면 잘못된 결론에 이른다.",
+      "decompiler_pattern": "unsigned int h[8] = { 0xC1059ED8, 0x367CD507, 0x3070DD17, 0xF70E5939,\n                       0xFFC00B31, 0x68581511, 0x64F98FA7, 0xBEFA4FA4 };",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "SHA-224와 crypto-sha256-h0(SHA-256)은 압축 함수, 라운드 상수 K가 완전히 동일하지만 초기값(H0)만 다르다 - 이 8개 값을 SHA-256의 0x6A09E667... 상수와 혼동하지 말아야 한다.",
+      "최종 다이제스트에서 SHA-256은 8워드(256비트)를 모두 출력하고 SHA-224는 마지막 워드를 잘라 7워드(224비트)만 출력한다 - 출력 길이로도 구분할 수 있다."
+    ],
+    "related": ["crypto-sha256-h0"],
+    "tags": ["sha224", "sha-224", "hash", "magic constant", "fips 180-4", "initial hash value", "C1059ED8"],
+    "sources": [{ "title": "NIST FIPS 180-4 - Secure Hash Standard", "url": "https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf" }]
+  },
+  {
+    "id": "crypto-sha384",
+    "type": "constant_group",
+    "name": "SHA-384 initial hash values (64-bit)",
+    "aliases": ["SHA-384 IV"],
+    "category": "crypto",
+    "platform": ["c", "linux", "windows"],
+    "standard": "NIST FIPS 180-4",
+    "signature": "",
+    "summary": "SHA-384가 사용하는 8개의 64비트 초기 해시 값. SHA-512와 압축 함수는 동일하지만 초기값이 다르고 출력이 잘린다.",
+    "numeric_constants": [],
+    "internals": "SHA-384는 SHA-512와 완전히 동일한 64비트 워드 기반 압축 함수, 라운드 상수(K, 80개), 메시지 스케줄을 사용하지만 서로 다른 8개의 64비트 초기 해시값(H0)으로 시작한다. 첫 초기값은 H0[0] = 0xCBBB9D5DC1059ED8 이다 (64비트 값이라 JS Number의 안전 정수 범위(2^53)를 넘을 수 있어 numeric_constants에는 넣지 않고 텍스트로만 표기한다). 최종적으로 512비트 상태 중 마지막 두 64비트 워드를 잘라내 384비트 다이제스트를 만든다. 흥미롭게도 H0[0]의 상위 32비트(0xCBBB9D5D)는 SHA-224의 H0[0](0xC1059ED8)과는 다른 값이지만, 하위 32비트(0xC1059ED8)는 SHA-224 H0[0]과 정확히 일치한다 - SHA-2 계열 상수들이 같은 유도 방식(소수의 제곱근/세제곱근 소수부)에서 나왔음을 보여주는 흔적이다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "64비트 초기 상수(H0[0] = 0xCBBB9D5DC1059ED8 등)가 8개 보이고 64비트 워드 연산(덧셈, 회전량이 28/34/39/14/18/41 등 SHA-512 스타일)이 함께 보이면 SHA-384/SHA-512 계열일 가능성이 높다. 32비트 SHA-256 로직과는 레지스터 폭과 회전량이 달라 구분할 수 있다.",
+      "decompiler_pattern": "// 64비트 상태 워드 8개, 예: h[0] = 0xCBBB9D5DC1059ED8ULL; ...",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "64비트 상수라 하위 32비트만 보면 SHA-224/SHA-256 상수와 우연히 비슷하거나 일부 일치하는 것처럼 보일 수 있다 - 워드 폭(32비트 vs 64비트)을 반드시 함께 확인해야 한다.",
+      "SHA-384는 SHA-512와 초기값만 다를 뿐 압축 함수가 동일하므로, 초기값 8개를 모두 비교하지 않고 일부만 보고 단정하면 SHA-512와 혼동할 수 있다."
+    ],
+    "related": ["crypto-sha512", "crypto-sha256-h0", "crypto-sha224"],
+    "tags": ["sha384", "sha-384", "hash", "64-bit", "fips 180-4", "initial hash value"],
+    "sources": [{ "title": "NIST FIPS 180-4 - Secure Hash Standard", "url": "https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf" }]
+  },
+  {
+    "id": "crypto-sha512",
+    "type": "constant_group",
+    "name": "SHA-512 initial hash values (64-bit)",
+    "aliases": ["SHA-512 IV"],
+    "category": "crypto",
+    "platform": ["c", "linux", "windows"],
+    "standard": "NIST FIPS 180-4",
+    "signature": "",
+    "summary": "SHA-512가 사용하는 8개의 64비트 초기 해시 값. SHA-256과 유도 방식은 비슷하지만 워드 폭이 두 배(64비트)이다.",
+    "numeric_constants": [],
+    "internals": "SHA-512는 8개의 64비트 워드(H0)로 초기화되며 첫 값은 H0[0] = 0x6A09E667F3BCC908 이다 (64비트 값이라 JS Number 안전 정수 범위를 넘을 수 있어 numeric_constants에는 넣지 않는다). 흥미로운 점은 이 값의 상위 32비트(0x6A09E667)가 SHA-256의 H0[0](0x6A09E667, crypto-sha256-h0 참고)과 정확히 동일하다는 것이다 - 두 알고리즘 모두 '첫 8개 소수의 제곱근의 소수 부분'이라는 같은 유도 규칙을 쓰기 때문에 상위 32비트가 겹치고, 뒤에 하위 32비트(0xF3BCC908)가 추가로 붙어 64비트 워드를 완성하는 구조다. 압축 함수는 64비트 덧셈과 28/34/39/14/18/41비트 등의 회전을 사용하며 80라운드를 수행한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "메모리에서 0x6A09E667로 시작하지만 그 뒤에 바로 4바이트가 더 이어지는(총 8바이트) 상수를 발견했다면 SHA-256이 아니라 SHA-512(또는 SHA-384)일 가능성이 있다 - 상위 32비트만 보고 SHA-256이라고 단정하면 안 된다. 64비트 레지스터/연산(RAX 전체 사용, 64비트 덧셈 등)이 함께 보이는지로 구분하는 것이 안전하다.",
+      "decompiler_pattern": "// h[0] = 0x6A09E667F3BCC908ULL; (64비트 초기값, SHA-256의 0x6A09E667과 상위 32비트만 일치)",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "SHA-512 H0[0]의 상위 32비트가 SHA-256 H0[0](crypto-sha256-h0)과 완전히 동일해서, 4바이트 단위로만 상수를 스캔하는 툴/사람은 SHA-256으로 오판하기 쉽다 - 반드시 8바이트 전체 값과 레지스터 폭을 함께 확인해야 한다.",
+      "SHA-384와 SHA-512는 압축 함수가 동일하므로 초기값 8개 전체를 비교하지 않으면 두 알고리즘을 구분할 수 없다."
+    ],
+    "related": ["crypto-sha384", "crypto-sha256-h0"],
+    "tags": ["sha512", "sha-512", "hash", "64-bit", "fips 180-4", "initial hash value"],
+    "sources": [{ "title": "NIST FIPS 180-4 - Secure Hash Standard", "url": "https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf" }]
+  },
+  {
+    "id": "crypto-crc32",
+    "type": "constant_group",
+    "name": "CRC32 polynomial (reflected)",
+    "aliases": ["CRC-32", "CRC32/IEEE 802.3", "zlib crc32"],
+    "category": "hash",
+    "platform": ["c", "linux", "windows"],
+    "standard": "비공식 레퍼런스 (IEEE 802.3에서 유래, ISO/IEC 3309와도 연관)",
+    "signature": "",
+    "summary": "가장 흔한 CRC32(IEEE 802.3) 변형에서 사용하는 반사된(reflected) 다항식 상수.",
+    "numeric_constants": [
+      { "decimal": 3988292384, "hex": "0xEDB88320", "label": "CRC32 reflected polynomial" }
+    ],
+    "internals": "CRC32는 다항식 나눗셈을 GF(2) 상에서 흉내내는 체크섬 알고리즘이다. 표준 다항식 0x04C11DB7을 비트 반사(reflect)한 형태인 0xEDB88320이 룩업 테이블 생성이나 비트 단위 계산 루프의 상수로 흔히 등장한다. 대부분의 구현은 256개 항목의 룩업 테이블을 미리 계산해 바이트 단위로 빠르게 갱신한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "루프에서 0xEDB88320과 `crc & 1`을 이용한 조건부 XOR(`if (crc & 1) crc = (crc >> 1) ^ 0xEDB88320; else crc >>= 1;`) 또는 256개 32비트 값으로 이루어진 룩업 테이블이 보이면 CRC32일 가능성이 매우 높다. zlib, PNG 청크 검증, 파일 무결성 체크에서 흔히 발견된다.",
+      "decompiler_pattern": "for ( i = 0; i < 8; ++i )\n  crc = (crc & 1) ? (crc >> 1) ^ 0xEDB88320 : (crc >> 1);",
+      "ida_example": "unsigned int crc_table[256];\n// crc_table[0]=0, crc_table[1]=0x77073096, ... 처럼 미리 계산된 테이블이 rodata에 존재"
+    },
+    "pitfalls": [
+      "CRC32에는 여러 변형(다항식, 초기값, 반사 여부, 최종 XOR 값)이 있어 0xEDB88320이 보인다고 해서 항상 zlib 표준 CRC32와 100% 동일한 파라미터라고 단정할 수 없다.",
+      "CRC는 암호학적 해시가 아니라 오류 검출용 체크섬이므로, 무결성 검증 목적일 뿐 충돌 저항성을 기대하면 안 된다."
+    ],
+    "related": ["crypto-adler32"],
+    "tags": ["crc32", "crc-32", "checksum", "polynomial", "EDB88320", "zlib", "lookup table"],
+    "sources": [{ "title": "zlib crc32 reference implementation", "url": "https://www.zlib.net/" }]
+  },
+  {
+    "id": "crypto-adler32",
+    "type": "constant_group",
+    "name": "Adler-32 modulus",
+    "aliases": ["Adler32", "MOD_ADLER"],
+    "category": "hash",
+    "platform": ["c", "linux", "windows"],
+    "standard": "비공식 레퍼런스 (zlib/RFC 1950 관련)",
+    "signature": "",
+    "summary": "Adler-32 체크섬에서 두 누적값을 모듈러 연산할 때 쓰이는 소수 65521.",
+    "numeric_constants": [
+      { "decimal": 65521, "hex": "0xFFF1", "label": "Adler-32 MOD_ADLER" }
+    ],
+    "internals": "Adler-32는 두 개의 16비트 누적값 A(초기값 1)와 B(초기값 0)를 유지하며, 각 바이트마다 `A = (A + byte) % 65521; B = (B + A) % 65521;`을 반복한 뒤 `checksum = (B << 16) | A`로 32비트 값을 만든다. 65521은 65536보다 작은 가장 큰 소수로 선택된 값이다. zlib 압축 스트림의 체크섬으로 사용된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "루프 안에 65521 (0xFFF1) 상수와 두 개의 누적 변수에 대한 모듈러 덧셈이 보이면 Adler-32일 가능성이 높다. CRC32보다 계산이 단순해 zlib 등에서 빠른 체크섬 용도로 선호된다.",
+      "decompiler_pattern": "a = 1; b = 0;\nfor ( i = 0; i < len; ++i ) {\n  a = (a + data[i]) % 65521;\n  b = (b + a) % 65521;\n}\nchecksum = (b << 16) | a;",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "Adler-32는 짧은 데이터나 특정 패턴에서 CRC32보다 충돌/오류 검출 성능이 떨어지는 것으로 알려져 있으나, 이는 설계 트레이드오프이지 구현 버그가 아니다.",
+      "초기값이 A=1, B=0이라는 점을 놓치고 둘 다 0으로 착각하면 값이 어긋난다."
+    ],
+    "related": ["crypto-crc32"],
+    "tags": ["adler32", "adler-32", "checksum", "zlib", "65521", "MOD_ADLER"],
+    "sources": [{ "title": "zlib manual - adler32", "url": "https://www.zlib.net/manual.html" }]
+  },
+  {
+    "id": "crypto-djb2",
+    "type": "constant_group",
+    "name": "DJB2 hash constants",
+    "aliases": ["djb2", "Bernstein hash", "times 33 hash"],
+    "category": "hash",
+    "platform": ["c", "linux", "windows"],
+    "standard": "비공식 레퍼런스 (Dan Bernstein이 comp.lang.c에서 공개)",
+    "signature": "",
+    "summary": "초기값 5381과 곱셈 상수 33을 사용하는 매우 단순하고 빠른 비암호학적 문자열 해시.",
+    "numeric_constants": [
+      { "decimal": 5381, "hex": "0x1505", "label": "DJB2 initial hash" },
+      { "decimal": 33, "hex": "0x21", "label": "DJB2 multiplier" }
+    ],
+    "internals": "DJB2는 해시값을 5381로 초기화한 뒤 문자열의 각 문자 c에 대해 `hash = hash * 33 + c;`를 반복한다. `hash * 33`은 `(hash << 5) + hash`로 최적화되어 나타나는 경우가 많다. 변형으로 덧셈 대신 XOR을 쓰는 `hash = hash * 33 ^ c;` 버전도 존재한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "초기값 5381과 함께 문자열 순회 루프에서 `(hash << 5) + hash + c` 또는 `hash * 33 + c` 패턴이 보이면 djb2 계열 해시일 가능성이 높다. 심볼 이름 해싱, 커맨드 디스패치용 문자열 매칭 최적화, 간단한 난독화 목적으로 CTF에 자주 등장한다. 다만 상수만으로는 덧셈 버전인지 XOR 버전인지까지 단정할 수 없어 실제 연산자를 확인해야 한다.",
+      "decompiler_pattern": "hash = 5381;\nfor ( i = 0; s[i]; ++i )\n  hash = ((hash << 5) + hash) + s[i];",
+      "ida_example": "v3 = 5381;\nwhile ( *v2 )\n  v3 = 33 * v3 + *v2++;"
+    },
+    "pitfalls": [
+      "5381이라는 초기값 자체는 특별한 수학적 근거보다는 실험적으로 좋은 분산 특성을 보였다고 알려진 값이라, 다른 상수로 바뀐 커스텀 변형도 CTF에서 흔하다 - 5381이 아니라고 djb2 계열이 아니라고 단정할 수 없다.",
+      "덧셈 버전(`hash*33+c`)과 XOR 버전(`hash*33^c`)은 결과가 다르므로 곱셈 상수 33만 보고 정확한 변형을 단정하면 안 된다."
+    ],
+    "related": ["crypto-fnv"],
+    "tags": ["djb2", "bernstein hash", "string hash", "5381", "times 33", "non-cryptographic hash"],
+    "sources": [{ "title": "djb2 hash function (comp.lang.c, Dan Bernstein)", "url": "" }]
+  },
+  {
+    "id": "crypto-murmurhash",
+    "type": "constant_group",
+    "name": "MurmurHash constants (MurmurHash3 x86_32 c1/c2)",
+    "aliases": ["MurmurHash2", "MurmurHash3", "MurmurHash3_x86_32"],
+    "category": "hash",
+    "platform": ["c", "linux", "windows"],
+    "standard": "비공식 레퍼런스 (Austin Appleby, 공개 도메인 구현)",
+    "signature": "",
+    "summary": "MurmurHash3의 32비트 변형(x86_32)에서 사용하는 대표적인 혼합 상수 c1, c2. 버전과 폭에 따라 다른 상수를 쓴다.",
+    "numeric_constants": [
+      { "decimal": 3432918353, "hex": "0xCC9E2D51", "label": "MurmurHash3 x86_32 c1" },
+      { "decimal": 461845907, "hex": "0x1B873593", "label": "MurmurHash3 x86_32 c2" }
+    ],
+    "internals": "MurmurHash3 x86_32는 입력을 4바이트 블록으로 나눠 각 블록에 c1(0xCC9E2D51)을 곱하고 15비트 좌회전한 뒤 c2(0x1B873593)를 곱해 누적 해시와 섞고, 13비트 좌회전과 추가 곱셈-덧셈으로 블록을 합친다. 마지막에는 finalization mix(fmix32)라는 별도의 비트 확산 단계를 거친다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "0xCC9E2D51과 0x1B873593이 곱셈 상수로 함께 등장하고, 15/13비트 회전과 fmix 단계(시프트 16/13, 곱셈 0x85EBCA6B, 0xC2B2AE35 등)가 뒤따르면 MurmurHash3 32비트 변형일 가능성이 높다. 다만 MurmurHash에는 MurmurHash1/2/2A/3, 32비트/128비트 등 버전이 매우 다양하고 버전마다 상수 세트가 다르므로, 이 상수 하나만으로 정확한 버전까지 단정할 수 없다 - 해시테이블 구현, 문자열 인덱싱, 체크섬 등 범용 용도로 흔히 쓰인다.",
+      "decompiler_pattern": "k1 *= 0xCC9E2D51;\nk1 = (k1 << 15) | (k1 >> 17);\nk1 *= 0x1B873593;\nh1 ^= k1;",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "MurmurHash1/2/2A/3는 서로 알고리즘 구조와 상수가 다르며, 32비트/64비트/128비트 변형도 존재한다 - c1/c2 상수 하나만 일치한다고 정확한 버전을 단정할 수 없다.",
+      "시드(seed) 값이 호출부마다 달라질 수 있어, 같은 알고리즘이라도 최종 해시값 상수는 다르게 나타난다."
+    ],
+    "related": ["crypto-fnv", "pattern-rol-ror"],
+    "tags": ["murmurhash", "murmur2", "murmur3", "hash", "cc9e2d51", "1b873593", "non-cryptographic hash"],
+    "sources": [{ "title": "MurmurHash3 reference implementation (Austin Appleby, SMHasher)", "url": "" }]
+  },
+  {
+    "id": "crypto-tea",
+    "type": "constant_group",
+    "name": "TEA (Tiny Encryption Algorithm) DELTA",
+    "aliases": ["TEA", "Tiny Encryption Algorithm"],
+    "category": "crypto",
+    "platform": ["c", "linux", "windows"],
+    "standard": "비공식 레퍼런스 (Wheeler & Needham, 1994)",
+    "signature": "",
+    "summary": "TEA 블록 암호가 매 라운드마다 누적하는 황금비 기반 상수 DELTA = 0x9E3779B9.",
+    "numeric_constants": [
+      { "decimal": 2654435769, "hex": "0x9E3779B9", "label": "TEA DELTA (golden ratio constant)" }
+    ],
+    "internals": "TEA는 64비트 블록(두 개의 32비트 워드 v0, v1)과 128비트 키(4개의 32비트 서브키)를 사용하는 매우 단순한 페이스텔(Feistel)류 블록 암호다. 매 라운드마다 누적 변수 sum에 DELTA(0x9E3779B9, 황금비 (sqrt(5)-1)/2 * 2^32에서 유도)를 더하고, v0와 v1을 서로의 값을 이용해 `(v1 << 4) + k0`, `v1 + sum`, `(v1 >> 5) + k1` 세 항을 XOR로 섞어 갱신한다. 표준은 32라운드(사이클) 수행을 권장한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "코드가 매우 짧고(보통 몇 줄), 두 개의 32비트 지역 변수(v0, v1)를 갱신하는 루프 안에서 `<<4`와 `>>5` 쉬프트, 그리고 0x9E3779B9의 반복 누적이 함께 보이면 TEA 계열(TEA/XTEA/XXTEA) 암호일 가능성이 매우 높다. 다만 이 상수 하나만으로 TEA/XTEA/XXTEA 중 정확히 어느 변형인지까지는 단정할 수 없고, 라운드 로직의 세부 구조(v0/v1을 다루는 순서, 서브키 인덱싱 방식)를 함께 봐야 구분할 수 있다. CTF의 커스텀 암호화 루틴에서 매우 자주 재사용된다.",
+      "decompiler_pattern": "unsigned int v0, v1, sum = 0, delta = 0x9E3779B9;\nfor ( i = 0; i < 32; ++i ) {\n  sum += delta;\n  v0 += ((v1 << 4) + k0) ^ (v1 + sum) ^ ((v1 >> 5) + k1);\n  v1 += ((v0 << 4) + k2) ^ (v0 + sum) ^ ((v0 >> 5) + k3);\n}",
+      "ida_example": "sum = 0;\nfor ( i = 0; i < 32; ++i )\n{\n  sum += 0x9E3779B9;\n  v0 += (v1 << 4) + key[0] ^ v1 + sum ^ (v1 >> 5) + key[1];\n  v1 += (v0 << 4) + key[2] ^ v0 + sum ^ (v0 >> 5) + key[3];\n}"
+    },
+    "pitfalls": [
+      "0x9E3779B9은 TEA뿐 아니라 XTEA, XXTEA에서도 동일하게 사용되므로, 이 상수만으로는 정확히 어느 변형인지 단정할 수 없다 - 라운드 로직 구조를 함께 확인해야 한다.",
+      "TEA는 등가 키(equivalent key) 문제 등 알려진 암호학적 약점이 있는 것으로 알려져 있으나, CTF에서는 이를 활용한 문제로 나오기도 하고 단순 난독화 목적으로 나오기도 한다 - 용도를 단정하지 않는다."
+    ],
+    "related": ["crypto-xtea", "crypto-xxtea"],
+    "tags": ["tea", "tiny encryption algorithm", "delta", "9E3779B9", "feistel", "golden ratio"],
+    "sources": [{ "title": "Wheeler, D.J. and Needham, R.M. - TEA, a Tiny Encryption Algorithm", "url": "" }]
+  },
+  {
+    "id": "crypto-xtea",
+    "type": "constant_group",
+    "name": "XTEA DELTA",
+    "aliases": ["XTEA", "eXtended TEA"],
+    "category": "crypto",
+    "platform": ["c", "linux", "windows"],
+    "standard": "비공식 레퍼런스 (Wheeler & Needham, 1997)",
+    "signature": "",
+    "summary": "TEA의 약점을 보완한 XTEA도 동일한 DELTA(0x9E3779B9)를 사용하지만 라운드 로직 구조가 TEA와 다르다.",
+    "numeric_constants": [
+      { "decimal": 2654435769, "hex": "0x9E3779B9", "label": "XTEA DELTA (TEA와 동일)" }
+    ],
+    "internals": "XTEA는 TEA와 동일하게 64비트 블록(v0, v1)과 128비트 키(4개의 32비트 서브키), 그리고 동일한 DELTA(0x9E3779B9)를 사용하지만, 서브키를 선택하는 인덱싱에 `sum`의 특정 비트(`(sum >> 11) & 3` 등)를 사용하고 v0/v1을 섞는 쉬프트-XOR 조합의 순서가 TEA와 다르게 재배열되어 있다. 이는 TEA에서 발견된 관련 키(related-key) 공격 등 약점을 보완하기 위해 설계되었다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "0x9E3779B9 누적과 `<<4`/`>>5` 쉬프트가 보인다는 점은 TEA와 같지만, 서브키 배열 인덱스 계산에 `sum` 값을 시프트/마스킹해서 사용하는 코드(`key[(sum>>11)&3]` 형태)가 함께 보이면 TEA가 아니라 XTEA일 가능성이 높다. 이 인덱싱 패턴이 없다면 TEA일 가능성이 더 높다 - 다만 커스텀 변형도 흔해 완전히 단정할 수는 없다.",
+      "decompiler_pattern": "sum = 0;\nfor ( i = 0; i < 32; ++i ) {\n  v0 += (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + key[sum & 3]);\n  sum += 0x9E3779B9;\n  v1 += (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + key[(sum >> 11) & 3]);\n}",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "TEA와 DELTA 상수가 완전히 동일해 상수만으로는 구분할 수 없다 - 서브키 인덱싱 방식과 쉬프트-XOR 조합 순서까지 비교해야 한다.",
+      "XTEA도 라운드 수, 엔디안 처리 방식이 구현마다 조금씩 달라 '표준' XTEA와 100% 동일하다고 단정하기 전에 실제 라운드 수를 세어보는 것이 안전하다."
+    ],
+    "related": ["crypto-tea", "crypto-xxtea"],
+    "tags": ["xtea", "extended tea", "delta", "9E3779B9", "feistel"],
+    "sources": [{ "title": "Wheeler, D.J. and Needham, R.M. - Tea extensions (XTEA)", "url": "" }]
+  },
+  {
+    "id": "crypto-xxtea",
+    "type": "constant_group",
+    "name": "XXTEA DELTA",
+    "aliases": ["XXTEA", "Corrected Block TEA"],
+    "category": "crypto",
+    "platform": ["c", "linux", "windows"],
+    "standard": "비공식 레퍼런스 (Wheeler & Needham, 1998)",
+    "signature": "",
+    "summary": "TEA/XTEA와 같은 DELTA(0x9E3779B9)를 사용하지만, 고정 64비트 블록이 아니라 가변 길이 전체 블록을 한 번에 처리하는 방식이 특징이다.",
+    "numeric_constants": [
+      { "decimal": 2654435769, "hex": "0x9E3779B9", "label": "XXTEA DELTA (TEA/XTEA와 동일)" }
+    ],
+    "internals": "XXTEA(Corrected Block TEA)는 TEA/XTEA와 동일한 DELTA(0x9E3779B9)를 사용하지만, 고정된 두 워드(v0, v1)만 다루는 대신 임의 개수의 32비트 워드로 이루어진 배열 전체를 한 번에 암호화하는 블록 암호다. 각 라운드에서 배열의 모든 원소를 순회하며 인접 원소(이전/다음)를 이용해 MX라는 혼합 함수(`(((z>>5)^(y<<2)) + ((y>>3)^(z<<4))) ^ ((sum^y) + (key[(p&3)^e]^z))`)로 갱신한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "0x9E3779B9 누적과 함께, 고정 2워드가 아니라 가변 길이 배열 전체를 이중 루프(바깥은 라운드, 안쪽은 배열 인덱스)로 순회하며 MX 매크로 형태의 복잡한 시프트-XOR-덧셈 조합이 보이면 TEA/XTEA가 아니라 XXTEA일 가능성이 높다. 배열 크기 n에 따라 라운드 수가 `6 + 52/n` 같은 공식으로 결정되는 코드가 있다면 XXTEA의 강력한 지표다.",
+      "decompiler_pattern": "#define MX (((z>>5)^(y<<2)) + ((y>>3)^(z<<4))) ^ ((sum^y) + (key[(p&3)^e]^z))\nsum = 0;\nz = v[n-1];\ndo {\n  sum += 0x9E3779B9;\n  e = (sum >> 2) & 3;\n  for ( p = 0; p < n - 1; ++p ) { y = v[p+1]; v[p] += MX; z = v[p]; }\n  y = v[0]; v[n-1] += MX; z = v[n-1];\n} while ( --rounds );",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "DELTA 상수가 TEA/XTEA와 동일하므로 상수만으로 XXTEA를 단정할 수 없다 - 가변 길이 배열 처리와 MX 혼합 함수의 존재로 구분해야 한다.",
+      "'XXTEA'라는 이름과 달리 TEA를 두 번 적용하는 것이 아니라 별도로 설계된 블록 암호이며, 블록 크기가 가변이라는 점이 TEA/XTEA(고정 64비트)와의 핵심 차이다."
+    ],
+    "related": ["crypto-tea", "crypto-xtea"],
+    "tags": ["xxtea", "corrected block tea", "delta", "9E3779B9", "variable length block"],
+    "sources": [{ "title": "Wheeler, D.J. and Needham, R.M. - Correction to XTEA (XXTEA)", "url": "" }]
+  },
+  {
+    "id": "crypto-rc4",
+    "type": "constant_group",
+    "name": "RC4 KSA (S-box initialization)",
+    "aliases": ["RC4", "ARC4", "ARCFOUR"],
+    "category": "crypto",
+    "platform": ["c", "linux", "windows"],
+    "standard": "비공식 레퍼런스 (RSA Security, 공개된 리버스 엔지니어링 스펙 ARCFOUR)",
+    "signature": "",
+    "summary": "고정된 매직 상수는 없지만, 256바이트 S-box를 0~255로 순차 초기화하는 KSA 루프가 RC4의 강력한 식별 지표다.",
+    "numeric_constants": [],
+    "internals": "RC4는 스트림 암호로, 먼저 KSA(Key Scheduling Algorithm)에서 256바이트 상태 배열 S를 `S[i] = i` (i=0..255)로 초기화한 뒤 키를 이용해 섞고(swap), 이후 PRGA(Pseudo-Random Generation Algorithm)에서 이 S 배열을 계속 섞어가며 키스트림 바이트를 생성해 평문/암호문과 XOR한다. 상수 값 자체는 없지만 '256바이트 배열을 0,1,2,...,255로 채우는 루프'라는 코드 패턴 자체가 RC4임을 시사하는 지표다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "`for (i = 0; i < 256; i++) S[i] = i;` 형태의 루프 직후 키 바이트를 이용한 swap 루프(`j = (j + S[i] + key[i % keylen]) % 256; swap(S[i], S[j]);`)가 이어지면 RC4일 가능성이 매우 높다. 이후 별도의 while/for 루프에서 i, j를 계속 갱신하며 `S[(S[i]+S[j])%256]`을 키스트림 바이트로 사용해 데이터와 XOR하는 코드가 이어지면 RC4의 PRGA 단계로 볼 수 있다. 다만 256바이트 배열 초기화 자체는 다른 목적(예: 단순 룩업 테이블, 순열 생성)으로도 쓰일 수 있어, KSA와 PRGA 두 단계가 모두 확인될 때 RC4로 보는 것이 더 안전하다.",
+      "decompiler_pattern": "for ( i = 0; i < 256; ++i )\n  S[i] = i;\nj = 0;\nfor ( i = 0; i < 256; ++i ) {\n  j = (j + S[i] + key[i % keylen]) & 0xFF;\n  tmp = S[i]; S[i] = S[j]; S[j] = tmp;\n}",
+      "ida_example": "for ( i = 0; i <= 255; ++i )\n  s[i] = i;"
+    },
+    "pitfalls": [
+      "256바이트 배열을 0~255로 채우는 루프만으로 RC4라고 단정할 수 없다 - 순열/셔플, 룩업 테이블 등 다른 목적의 코드일 수도 있으므로 뒤이은 swap 루프(KSA)와 키스트림 생성 루프(PRGA)까지 확인해야 한다.",
+      "RC4는 여러 알려진 통계적 편향(bias) 문제로 인해 최신 프로토콜에서는 사용이 권장되지 않는 것으로 알려져 있으나, CTF나 레거시 바이너리에서는 여전히 자주 등장한다."
+    ],
+    "related": ["pattern-xor-loop"],
+    "tags": ["rc4", "arc4", "arcfour", "ksa", "prga", "s-box", "stream cipher"],
+    "sources": [{ "title": "RFC 6229 - Test Vectors for the Stream Cipher RC4", "url": "https://www.rfc-editor.org/rfc/rfc6229" }]
+  },
+  {
+    "id": "crypto-aes-key-schedule",
+    "type": "constant_group",
+    "name": "AES Rcon / S-box",
+    "aliases": ["AES", "Rijndael", "AES key schedule", "Rcon table", "AES S-box"],
+    "category": "crypto",
+    "platform": ["c", "linux", "windows"],
+    "standard": "NIST FIPS 197",
+    "signature": "",
+    "summary": "AES 키 스케줄에서 사용하는 고정 라운드 상수(Rcon) 테이블과, 치환 단계에서 사용하는 고정 S-box 테이블. 둘 다 코드/데이터 섹션에 하드코딩되어 있으면 AES 구현일 가능성이 매우 높다.",
+    "numeric_constants": [
+      { "decimal": 1, "hex": "0x01", "label": "AES Rcon[1]" },
+      { "decimal": 2, "hex": "0x02", "label": "AES Rcon[2]" },
+      { "decimal": 4, "hex": "0x04", "label": "AES Rcon[3]" },
+      { "decimal": 8, "hex": "0x08", "label": "AES Rcon[4]" },
+      { "decimal": 16, "hex": "0x10", "label": "AES Rcon[5]" },
+      { "decimal": 32, "hex": "0x20", "label": "AES Rcon[6]" },
+      { "decimal": 64, "hex": "0x40", "label": "AES Rcon[7]" },
+      { "decimal": 128, "hex": "0x80", "label": "AES Rcon[8]" },
+      { "decimal": 27, "hex": "0x1B", "label": "AES Rcon[9]" },
+      { "decimal": 54, "hex": "0x36", "label": "AES Rcon[10]" }
+    ],
+    "internals": "AES(Rijndael)의 키 스케줄(key expansion)은 라운드마다 서로 다른 1바이트 라운드 상수 Rcon[i] = x^(i-1) (GF(2^8) 상의 2의 거듭제곱)을 워드의 첫 바이트와 XOR한다. 이 값들은 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36, ... 처럼 8번째까지는 단순히 2배씩 커지다가 0x80을 넘는 시점부터 GF(2^8) 기약다항식(0x11B)에 의한 축소 연산이 개입해 0x1B, 0x36 같은 값으로 이어진다. 또한 SubBytes 단계에서 사용하는 고정 256바이트 S-box(첫 몇 바이트: 0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, ...)도 AES 구현의 매우 강력한 지표다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "데이터 섹션에서 0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1B,0x36 형태로 이어지는 Rcon 테이블, 또는 0x63,0x7C,0x77,0x7B로 시작하는 256바이트 S-box 테이블(혹은 그 역테이블인 InvSBox) 중 하나라도 발견되면 AES(또는 Rijndael 기반) 구현일 가능성이 매우 높다. 두 테이블이 함께 있으면 신뢰도가 더 올라간다. 다만 소프트웨어 구현이 T-table 최적화나 AES-NI 명령어(`aesenc`, `aesdec`, `aeskeygenassist` 등)를 사용하는 경우 S-box/Rcon이 코드에 명시적으로 보이지 않을 수 있으므로, 이 상수들이 안 보인다고 AES가 아니라고 단정할 수는 없다.",
+      "decompiler_pattern": "static const unsigned char Rcon[10] = { 0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1B,0x36 };\nstatic const unsigned char sbox[256] = { 0x63,0x7C,0x77,0x7B,0xF2,0x6B,0x6F,0xC5, ... };",
+      "ida_example": "byte_ptr Rcon[]: 01 02 04 08 10 20 40 80 1B 36 ...\n.rodata:sbox     : 63 7C 77 7B F2 6B 6F C5 ..."
+    },
+    "pitfalls": [
+      "AES-NI 하드웨어 명령어(`aesenc`, `aesenclast`, `aeskeygenassist` 등)를 사용하는 최적화된 바이너리는 S-box/Rcon 테이블이 코드에 아예 나타나지 않을 수 있다 - 테이블이 없다고 AES가 아니라고 단정하면 안 된다.",
+      "Rcon 앞부분(0x01,0x02,0x04,0x08)은 단순히 2의 거듭제곱이라 다른 비트마스크/플래그 테이블과 우연히 겹칠 수 있다 - 0x1B, 0x36처럼 GF(2^8) 축소가 개입된 뒤쪽 값까지 일치해야 신뢰도가 높다.",
+      "S-box는 AES 고유의 것이 아니라 다른 SPN 기반 블록 암호가 유사한 개념의 치환 테이블을 쓸 수 있으므로, 정확히 0x63,0x7C,0x77,0x7B... 순서까지 일치하는지 확인해야 한다."
+    ],
+    "related": ["crypto-tea"],
+    "tags": ["aes", "rijndael", "rcon", "s-box", "sbox", "key schedule", "fips 197", "aes-ni"],
+    "sources": [{ "title": "NIST FIPS 197 - Advanced Encryption Standard (AES)", "url": "https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf" }]
+  }
+]
