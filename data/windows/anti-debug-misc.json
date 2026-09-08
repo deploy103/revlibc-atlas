@@ -1,0 +1,366 @@
+[
+  {
+    "id": "win-isdebuggerpresent",
+    "type": "function",
+    "name": "IsDebuggerPresent",
+    "aliases": [],
+    "category": "anti-debug",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "debugapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "BOOL IsDebuggerPresent(void);",
+    "summary": "현재 프로세스가 유저 모드 디버거에 의해 디버깅되고 있는지 확인하는 가장 기본적인 안티디버깅 API.",
+    "parameters": [],
+    "return_value": {
+      "success": "0이 아닌 값 (TRUE) - 디버거가 붙어 있음",
+      "failure": "0 (FALSE) - 디버거가 붙어 있지 않음",
+      "meaning": "실패라는 개념이 없고, 단순히 현재 상태를 boolean으로 반환한다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      { "name": "PEB.BeingDebugged offset", "decimal": 2, "hex": "0x2", "desc": "PEB(Process Environment Block) 구조체 내 BeingDebugged 필드 오프셋 (x86/x64 공통)" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    if (IsDebuggerPresent()) {\n        printf(\"Debugger detected!\\n\");\n        return 1;\n    }\n    printf(\"No debugger\\n\");\n    return 0;\n}\n",
+    "example_output": "No debugger\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "PEB(Process Environment Block)의 BeingDebugged 바이트 필드를 그대로 읽어 반환하는 매우 얇은 래퍼 함수다. x86에서는 fs:[30h], x64에서는 gs:[60h]로 PEB를 찾은 뒤 오프셋 +0x2 위치의 바이트를 읽는다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "바이너리에서 IsDebuggerPresent 호출 직후 조건 분기가 있으면 전형적인 안티디버깅 체크다. 컴파일러 최적화나 난독화로 인해 IAT의 IsDebuggerPresent 호출 없이 PEB.BeingDebugged를 직접 읽는 인라인 코드로 대체되어 있는 경우도 많으므로, 이름이 안 보인다고 안티디버깅이 없다고 단정하면 안 된다.",
+      "decompiler_pattern": "if ( IsDebuggerPresent() )\n{\n  ExitProcess(1);\n}",
+      "ida_example": "if ( IsDebuggerPresent() )\n  sub_401200();"
+    },
+    "assembly_pattern": "mov rax, gs:[60h]\nmovzx eax, byte ptr [rax+2]\n; IsDebuggerPresent() 호출 없이 PEB.BeingDebugged를 직접 읽는 인라인 패턴",
+    "pitfalls": [
+      "PEB.BeingDebugged 바이트를 디버거로 직접 0으로 패치하거나 IsDebuggerPresent를 후킹해 항상 FALSE를 반환하게 만들면 쉽게 우회된다.",
+      "이 체크 하나만 우회했다고 안심하면 안 된다 - 같은 바이너리에 CheckRemoteDebuggerPresent, NtQueryInformationProcess 등 다른 체크가 중복으로 존재하는 경우가 많다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "ptrace(PTRACE_TRACEME, ...) 자가 검사 패턴", "windows": "IsDebuggerPresent" },
+    "related": ["win-checkremotedebuggerpresent", "posix-ptrace", "win-ntqueryinformationprocess"],
+    "tags": ["PEB", "BeingDebugged", "anti-debugging", "anti-debug", "IsDebuggerPresent", "디버거 탐지"],
+    "sources": [
+      { "title": "Microsoft Learn - IsDebuggerPresent function", "url": "https://learn.microsoft.com/windows/win32/api/debugapi/nf-debugapi-isdebuggerpresent" }
+    ]
+  },
+  {
+    "id": "win-checkremotedebuggerpresent",
+    "type": "function",
+    "name": "CheckRemoteDebuggerPresent",
+    "aliases": [],
+    "category": "anti-debug",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "debugapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "BOOL CheckRemoteDebuggerPresent(HANDLE hProcess, PBOOL pbDebuggerPresent);",
+    "summary": "지정한 프로세스(자기 자신을 포함)에 디버거가 붙어 있는지 확인한다. 이름과 달리 GetCurrentProcess()를 넘기면 자기 자신도 검사할 수 있다.",
+    "parameters": [
+      { "name": "hProcess", "type": "HANDLE", "desc": "검사할 프로세스 핸들. 자기 자신을 검사하려면 GetCurrentProcess()를 넘긴다.", "direction": "in", "nullable": false },
+      { "name": "pbDebuggerPresent", "type": "PBOOL", "desc": "디버거 존재 여부가 기록될 출력 버퍼", "direction": "out", "nullable": false }
+    ],
+    "return_value": {
+      "success": "0이 아닌 값 (true) - 함수 자체는 성공적으로 실행됨",
+      "failure": "0 (false)",
+      "meaning": "함수의 반환값은 API 호출 성공 여부이며, 실제 디버거 존재 여부는 pbDebuggerPresent로 얻는다. 실패 시 GetLastError()로 원인 확인.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    BOOL isDebugged = FALSE;\n    CheckRemoteDebuggerPresent(GetCurrentProcess(), &isDebugged);\n    printf(\"Debugger present: %d\\n\", isDebugged);\n    return 0;\n}\n",
+    "example_output": "Debugger present: 0\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "내부적으로 IsDebuggerPresent보다 더 신뢰할 수 있는 방식으로, 커널 정보를 조회해(NtQueryInformationProcess의 ProcessDebugPort 등을 사용하는 것으로 알려져 있다) 지정한 프로세스에 디버그 포트가 연결되어 있는지 확인한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "IsDebuggerPresent는 오직 '현재 프로세스'만 검사할 수 있지만, CheckRemoteDebuggerPresent는 임의의 프로세스 핸들(원격 프로세스 포함)을 받을 수 있다는 차이가 있다. 다만 hProcess에 GetCurrentProcess()를 넘겨 로컬 자가 검사 용도로 사용하는 경우가 실무/CTF에서 훨씬 흔하다. 두 API를 각각 후킹해야 완전한 우회가 된다.",
+      "decompiler_pattern": "BOOL flag = FALSE;\nCheckRemoteDebuggerPresent(GetCurrentProcess(), &flag);\nif ( flag )\n  exit(1);",
+      "ida_example": "CheckRemoteDebuggerPresent(hProcess, &pbDebuggerPresent);\nif ( pbDebuggerPresent )\n  sub_401300();"
+    },
+    "pitfalls": [
+      "pbDebuggerPresent를 초기화하지 않고 넘기면, 함수가 실패했을 때 이전 스택 쓰레기 값이 그대로 남아 잘못 판단할 수 있다.",
+      "IsDebuggerPresent만 우회하고 이 함수를 놓치는 경우가 많다 - 두 체크가 같은 바이너리에 함께 존재하는지 항상 확인해야 한다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "ptrace(PTRACE_ATTACH) 실패 여부로 외부 프로세스가 디버깅 중인지 간접 판단", "windows": "CheckRemoteDebuggerPresent" },
+    "related": ["win-isdebuggerpresent", "posix-ptrace", "win-ntqueryinformationprocess"],
+    "tags": ["anti-debugging", "anti-debug", "remote debugger", "CheckRemoteDebuggerPresent", "디버거 탐지"],
+    "sources": [
+      { "title": "Microsoft Learn - CheckRemoteDebuggerPresent function", "url": "https://learn.microsoft.com/windows/win32/api/debugapi/nf-debugapi-checkremotedebuggerpresent" }
+    ]
+  },
+  {
+    "id": "win-outputdebugstring",
+    "type": "function",
+    "name": "OutputDebugString",
+    "aliases": ["OutputDebugStringA", "OutputDebugStringW"],
+    "category": "anti-debug",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "debugapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "void OutputDebugStringA(LPCSTR lpOutputString);\nvoid OutputDebugStringW(LPCWSTR lpOutputString);",
+    "summary": "디버그용 문자열을 출력한다(디버거가 붙어 있으면 디버거 콘솔로, 없으면 시스템 디버거 채널로 전달). ANSI판(A)/유니코드판(W)이 있으며 통칭 OutputDebugString으로 부른다.",
+    "parameters": [
+      { "name": "lpOutputString", "type": "LPCSTR / LPCWSTR", "desc": "출력할 널 종료 문자열", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "",
+      "failure": "",
+      "meaning": "반환값이 없다(void). 대신 디버거 유무에 따른 부작용(side effect) 차이를 이용해 안티디버깅에 사용된다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "#include <windows.h>\n\nint main(void)\n{\n    OutputDebugStringA(\"Hello from OutputDebugString\\n\");\n    return 0;\n}\n",
+    "example_output": "(디버거가 붙어 있으면 디버거의 출력창에 문자열이 표시된다. 콘솔(stdout)에는 아무것도 출력되지 않는다.)",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "디버거가 프로세스에 붙어 있으면 OUTPUT_DEBUG_STRING_EVENT 디버그 이벤트가 디버거로 전달된다. 붙어 있지 않으면 문자열은 버려지거나 DbgPrint 계열 채널로 흘러간다. 이 차이(디버거가 없을 때 SetLastError 값이 변하지 않거나 예외 처리 경로가 달라지는 등의 부작용)를 이용해 디버거 유무를 간접적으로 판별하는 기법이 알려져 있다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "OutputDebugString 자체보다는, 호출 전후로 SetLastError(0)을 설정하고 GetLastError()가 여전히 0인지(디버거가 없으면 특정 값으로 바뀔 수 있음을 이용) 검사하는 조합으로 안티디버깅에 쓰이는 경우가 있다. 단독 호출만으로는 안티디버깅으로 단정하기 어렵고 주변 코드(GetLastError 검사)를 함께 봐야 한다.",
+      "decompiler_pattern": "SetLastError(0);\nOutputDebugStringA(\"test\");\nif ( GetLastError() == 0 )\n{\n  // 디버거가 없다고 판단하는 분기\n}",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "OutputDebugString이 보인다고 무조건 안티디버깅은 아니다 - 단순 로깅/디버그 메시지 목적으로도 매우 흔하게 사용된다.",
+      "이 기법은 Windows 버전에 따라 동작이 달라질 수 있어 신뢰도가 낮은 안티디버깅 기법으로 분류된다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "", "windows": "OutputDebugString" },
+    "related": ["win-isdebuggerpresent"],
+    "tags": ["anti-debugging", "anti-debug", "OutputDebugString", "GetLastError trick", "디버거 탐지"],
+    "sources": [
+      { "title": "Microsoft Learn - OutputDebugStringA function", "url": "https://learn.microsoft.com/windows/win32/api/debugapi/nf-debugapi-outputdebugstringa" }
+    ]
+  },
+  {
+    "id": "win-queryperformancecounter",
+    "type": "function",
+    "name": "QueryPerformanceCounter",
+    "aliases": [],
+    "category": "anti-debug",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "profileapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "BOOL QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount);",
+    "summary": "고해상도 성능 카운터의 현재 값을 읽는다. 두 시점에서 값을 읽어 그 차이로 경과 시간을 측정하는 타이밍 기반 안티디버깅에 자주 사용된다.",
+    "parameters": [
+      { "name": "lpPerformanceCount", "type": "LARGE_INTEGER *", "desc": "현재 카운터 값이 기록될 출력 버퍼", "direction": "out", "nullable": false }
+    ],
+    "return_value": {
+      "success": "0이 아닌 값 (true)",
+      "failure": "0 (false) - Windows XP 이후 사실상 모든 시스템에서 지원되므로 실패는 거의 발생하지 않는다.",
+      "meaning": "성공 시 lpPerformanceCount에 카운터 값이 채워진다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    LARGE_INTEGER freq, start, end;\n    QueryPerformanceFrequency(&freq);\n\n    QueryPerformanceCounter(&start);\n    // 보호 대상 코드 / 체크 루틴\n    QueryPerformanceCounter(&end);\n\n    double elapsed_ms = (double)(end.QuadPart - start.QuadPart) * 1000.0 / freq.QuadPart;\n    if (elapsed_ms > 100.0) {\n        printf(\"Debugger suspected (elapsed=%.2fms)\\n\", elapsed_ms);\n    }\n    return 0;\n}\n",
+    "example_output": "(정상 실행 시 아무 것도 출력되지 않음; 브레이크포인트로 코드가 멈춰 있었다면 \"Debugger suspected\" 출력)",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "QueryPerformanceFrequency로 얻은 초당 틱(tick) 수와 결합해 두 시점 사이의 경과 시간을 마이크로초/나노초 단위까지 정밀하게 계산할 수 있다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "코드 블록 실행 전후로 QueryPerformanceCounter를 두 번 호출해 차이가 임계값(threshold)을 넘으면 디버거의 싱글스텝/브레이크포인트로 실행이 멈췄던 것으로 판단하는 타이밍 기반 안티디버깅 패턴의 핵심 API다. GetTickCount/GetTickCount64와 같은 계열의 목적으로 쓰이지만 해상도가 훨씬 높아 더 정교한 체크에 사용된다.",
+      "decompiler_pattern": "QueryPerformanceCounter(&start);\nsub_401000();\nQueryPerformanceCounter(&end);\nif ( (end.QuadPart - start.QuadPart) > threshold )\n{\n  // 디버거로 판단, 종료 또는 다른 실행 경로\n}",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "임계값(threshold)이 하드코딩되어 있는 경우가 많으므로, 디컴파일 코드에서 비교 상수 값을 찾으면 우회 지점을 특정할 수 있다.",
+      "디버거의 '실행 재개 시 타이머 보정' 기능이나 하드웨어 브레이크포인트 사용으로 이 체크를 우회하는 경우도 있다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "clock_gettime(CLOCK_MONOTONIC, ...) / rdtsc", "windows": "QueryPerformanceCounter" },
+    "related": ["win-gettickcount", "win-gettickcount64", "win-sleep"],
+    "tags": ["anti-debugging", "anti-debug", "timing check", "QueryPerformanceCounter", "타이밍 체크", "single-step detection"],
+    "sources": [
+      { "title": "Microsoft Learn - QueryPerformanceCounter function", "url": "https://learn.microsoft.com/windows/win32/api/profileapi/nf-profileapi-queryperformancecounter" }
+    ]
+  },
+  {
+    "id": "win-gettickcount",
+    "type": "function",
+    "name": "GetTickCount",
+    "aliases": [],
+    "category": "anti-debug",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "sysinfoapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "DWORD GetTickCount(void);",
+    "summary": "시스템이 부팅된 이후 경과한 시간을 밀리초 단위로 반환한다. 두 시점을 측정해 실행 지연을 탐지하는 타이밍 기반 안티디버깅에 흔히 사용된다.",
+    "parameters": [],
+    "return_value": {
+      "success": "부팅 이후 경과한 밀리초 (DWORD)",
+      "failure": "",
+      "meaning": "실패라는 개념이 없다. 다만 약 49.7일(2^32 ms)마다 값이 오버플로우되어 0으로 되돌아간다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    DWORD start = GetTickCount();\n    // 보호 대상 코드\n    DWORD end = GetTickCount();\n\n    if (end - start > 1000) {\n        printf(\"Debugger suspected\\n\");\n    }\n    return 0;\n}\n",
+    "example_output": "(정상 실행 시 아무 출력 없음; 코드 실행 중 디버거로 오래 멈춰 있었다면 \"Debugger suspected\" 출력)",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "내부적으로 인터럽트 타이머(시스템 틱)를 기반으로 하며 QueryPerformanceCounter보다 해상도가 낮다(보통 10~16ms 단위).",
+    "reversing": {
+      "importance": "High",
+      "notes": "QueryPerformanceCounter와 같은 원리로, 함수 실행 전후 두 시점의 GetTickCount 차이가 비정상적으로 크면(브레이크포인트로 멈췄다면) 디버거로 판단한다. 해상도가 낮아 QueryPerformanceCounter보다 정밀한 싱글스텝 탐지에는 부적합하지만, 여전히 CTF 바이너리에서 흔히 발견되는 패턴이다.",
+      "decompiler_pattern": "DWORD t1 = GetTickCount();\nsub_401000();\nDWORD t2 = GetTickCount();\nif ( t2 - t1 > 500 )\n  exit(1);",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "약 49.7일마다 값이 0으로 wrap-around되므로, 뺄셈(end - start)은 부호 없는 산술로 처리되어 wrap-around 상황에서도 정상적인 차이가 계산되지만, 잘못된 부호 있는 비교를 사용하면 오판할 수 있다.",
+      "GetTickCount64가 도입된 이후에도 여전히 32비트 버전이 하위 호환을 위해 널리 쓰인다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "clock_gettime(CLOCK_MONOTONIC, ...)", "windows": "GetTickCount" },
+    "related": ["win-gettickcount64", "win-queryperformancecounter", "win-sleep"],
+    "tags": ["anti-debugging", "anti-debug", "timing check", "GetTickCount", "타이밍 체크", "wrap-around"],
+    "sources": [
+      { "title": "Microsoft Learn - GetTickCount function", "url": "https://learn.microsoft.com/windows/win32/api/sysinfoapi/nf-sysinfoapi-gettickcount" }
+    ]
+  },
+  {
+    "id": "win-gettickcount64",
+    "type": "function",
+    "name": "GetTickCount64",
+    "aliases": [],
+    "category": "anti-debug",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "sysinfoapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "ULONGLONG GetTickCount64(void);",
+    "summary": "시스템이 부팅된 이후 경과한 시간을 밀리초 단위로 64비트 정수로 반환한다. GetTickCount와 동일한 목적의 타이밍 기반 안티디버깅에 쓰이지만 오버플로우 주기가 훨씬 길다.",
+    "parameters": [],
+    "return_value": {
+      "success": "부팅 이후 경과한 밀리초 (ULONGLONG)",
+      "failure": "",
+      "meaning": "GetTickCount의 32비트 오버플로우(약 49.7일) 문제를 해결한 버전으로, 이론상 약 5억 8천만 년 후에 오버플로우된다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    ULONGLONG start = GetTickCount64();\n    // 보호 대상 코드\n    ULONGLONG end = GetTickCount64();\n\n    if (end - start > 1000) {\n        printf(\"Debugger suspected\\n\");\n    }\n    return 0;\n}\n",
+    "example_output": "(정상 실행 시 아무 출력 없음; 코드 실행 중 디버거로 오래 멈춰 있었다면 \"Debugger suspected\" 출력)",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "GetTickCount와 동일한 시스템 틱 카운터를 기반으로 하되 64비트로 반환해 wrap-around 문제를 사실상 제거했다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "GetTickCount와 사용 목적/패턴이 동일한 타이밍 기반 안티디버깅 API다. 두 시점의 차이를 임계값과 비교해 디버깅 여부(싱글스텝, 브레이크포인트로 인한 지연)를 판단한다. 디컴파일 결과에서 GetTickCount와 GetTickCount64가 둘 다 나타날 수 있으므로 이름만 보고 하나만 우회하지 않도록 주의해야 한다.",
+      "decompiler_pattern": "ULONGLONG t1 = GetTickCount64();\nsub_401000();\nULONGLONG t2 = GetTickCount64();\nif ( t2 - t1 > 500 )\n  exit(1);",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "GetTickCount와 GetTickCount64는 서로 다른 함수이므로, 하나만 후킹하고 다른 하나를 놓치는 실수가 흔하다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "clock_gettime(CLOCK_MONOTONIC, ...)", "windows": "GetTickCount64" },
+    "related": ["win-gettickcount", "win-queryperformancecounter", "win-sleep"],
+    "tags": ["anti-debugging", "anti-debug", "timing check", "GetTickCount64", "타이밍 체크"],
+    "sources": [
+      { "title": "Microsoft Learn - GetTickCount64 function", "url": "https://learn.microsoft.com/windows/win32/api/sysinfoapi/nf-sysinfoapi-gettickcount64" }
+    ]
+  },
+  {
+    "id": "win-sleep",
+    "type": "function",
+    "name": "Sleep",
+    "aliases": [],
+    "category": "anti-debug",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "synchapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "void Sleep(DWORD dwMilliseconds);",
+    "summary": "지정한 밀리초 동안 현재 스레드의 실행을 일시 중단한다. 안티디버깅에서는 실행 지연을 통한 자동분석 회피와 타이밍 체크의 기준점으로 활용된다.",
+    "parameters": [
+      { "name": "dwMilliseconds", "type": "DWORD", "desc": "일시 중단할 시간(밀리초). INFINITE를 넘기면 무한 대기.", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "",
+      "failure": "",
+      "meaning": "반환값이 없다(void).",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      { "name": "INFINITE", "decimal": 4294967295, "hex": "0xFFFFFFFF", "desc": "무한 대기 (Sleep(INFINITE)은 스레드를 영구히 정지시킨다)" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    DWORD before = GetTickCount();\n    Sleep(3000); // 3초 대기 - 샌드박스 타임아웃 회피 또는 타이밍 체크 기준점\n    DWORD after = GetTickCount();\n\n    if (after - before < 2900) {\n        printf(\"Sleep was patched/hooked - debugger suspected\\n\");\n    }\n    return 0;\n}\n",
+    "example_output": "(정상 실행 시 약 3초 대기 후 종료; Sleep이 후킹/패치되어 실제로 대기하지 않았다면 경고 메시지 출력)",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "내부적으로 SleepEx(dwMilliseconds, FALSE)를 호출하는 것과 동일하며, 지정한 시간 동안 스레드를 대기(waitable) 상태로 전환해 CPU를 양보한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "악성코드/안티디버깅 루틴에서 Sleep은 두 가지 용도로 쓰인다: (1) 자동화된 샌드박스가 짧은 시간만 관찰하고 종료하는 것을 노려 긴 Sleep으로 분석을 회피하는 sandbox evasion, (2) Sleep 호출 전후로 GetTickCount/QueryPerformanceCounter를 측정해 실제 경과 시간이 요청한 시간과 크게 다르면(디버거가 브레이크포인트로 멈췄거나 Sleep 자체가 패치/후킹되었다면) 디버깅으로 판단하는 타이밍 체크의 기준점. 일부 고급 안티디버깅은 Sleep 대신 RDTSC 루프 등으로 직접 시간을 태워 후킹을 우회하기도 한다.",
+      "decompiler_pattern": "DWORD t1 = GetTickCount();\nSleep(5000);\nDWORD t2 = GetTickCount();\nif ( t2 - t1 < 4500 )\n  exit(1); // Sleep이 가속되었다고 판단",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "Sleep(0)은 대기가 아니라 같은 우선순위의 다른 스레드에게 실행 기회를 양보하는 용도로 쓰인다 - 시간 지연 목적의 Sleep과 혼동하지 말 것.",
+      "디버거의 'Sleep 가속(skip)' 스크립트나 API 후킹으로 Sleep 자체를 무력화해 안티디버깅을 우회하는 경우가 흔하다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "usleep / nanosleep", "windows": "Sleep" },
+    "related": ["win-gettickcount", "win-queryperformancecounter"],
+    "tags": ["anti-debugging", "anti-debug", "Sleep", "sandbox evasion", "timing check", "타이밍 체크"],
+    "sources": [
+      { "title": "Microsoft Learn - Sleep function", "url": "https://learn.microsoft.com/windows/win32/api/synchapi/nf-synchapi-sleep" }
+    ]
+  },
+  {
+    "id": "win-ntqueryinformationprocess",
+    "type": "function",
+    "name": "NtQueryInformationProcess",
+    "aliases": ["ZwQueryInformationProcess"],
+    "category": "anti-debug",
+    "platform": ["windows"],
+    "standard": "WinAPI (Native API, 대부분 undocumented)",
+    "header": "winternl.h (일부 정의만 공개, 전체는 undocumented)",
+    "library": "ntdll.dll",
+    "signature": "NTSTATUS NtQueryInformationProcess(HANDLE ProcessHandle, PROCESSINFOCLASS ProcessInformationClass, PVOID ProcessInformation, ULONG ProcessInformationLength, PULONG ReturnLength);",
+    "summary": "프로세스에 대한 다양한 정보를 조회하는 ntdll의 저수준 Native API. ProcessDebugPort 등의 정보 클래스를 이용하면 IsDebuggerPresent보다 더 은밀하고 근본적인 안티디버깅 체크가 가능하다.",
+    "parameters": [
+      { "name": "ProcessHandle", "type": "HANDLE", "desc": "정보를 조회할 프로세스 핸들", "direction": "in", "nullable": false },
+      { "name": "ProcessInformationClass", "type": "PROCESSINFOCLASS", "desc": "조회할 정보의 종류 (ProcessDebugPort=7 등)", "direction": "in", "nullable": false },
+      { "name": "ProcessInformation", "type": "PVOID", "desc": "결과가 기록될 출력 버퍼", "direction": "out", "nullable": false },
+      { "name": "ProcessInformationLength", "type": "ULONG", "desc": "ProcessInformation 버퍼 크기(바이트)", "direction": "in", "nullable": false },
+      { "name": "ReturnLength", "type": "PULONG", "desc": "실제로 기록된 바이트 수 (필요 없으면 NULL 가능)", "direction": "out", "nullable": true }
+    ],
+    "return_value": {
+      "success": "STATUS_SUCCESS (0)",
+      "failure": "0이 아닌 NTSTATUS 오류 코드",
+      "meaning": "NTSTATUS 규약을 따른다 - 0이면 성공, 음수(최상위 비트 1)면 실패.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      { "name": "ProcessDebugPort", "decimal": 7, "hex": "0x7", "desc": "프로세스에 연결된 디버그 포트 핸들 조회. 0이 아니면 디버거가 붙어 있다는 뜻." },
+      { "name": "ProcessDebugObjectHandle", "decimal": 30, "hex": "0x1E", "desc": "프로세스의 디버그 오브젝트 핸들 조회. 디버거가 없으면 STATUS_PORT_NOT_SET 등의 오류를 반환한다." },
+      { "name": "ProcessDebugFlags", "decimal": 31, "hex": "0x1F", "desc": "EPROCESS.NoDebugInherit의 반전 값을 조회. 값이 0이면 디버깅 중(NoDebugInherit=1)임을 의미." }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\ntypedef LONG (NTAPI *pNtQueryInformationProcess)(\n    HANDLE ProcessHandle, DWORD ProcessInformationClass,\n    PVOID ProcessInformation, ULONG ProcessInformationLength, PULONG ReturnLength);\n\nint main(void)\n{\n    HMODULE hNtdll = GetModuleHandleA(\"ntdll.dll\");\n    pNtQueryInformationProcess NtQIP =\n        (pNtQueryInformationProcess)GetProcAddress(hNtdll, \"NtQueryInformationProcess\");\n\n    DWORD_PTR debugPort = 0;\n    NtQIP(GetCurrentProcess(), 7 /* ProcessDebugPort */, &debugPort, sizeof(debugPort), NULL);\n\n    if (debugPort != 0) {\n        printf(\"Debugger detected via ProcessDebugPort\\n\");\n    }\n    return 0;\n}\n",
+    "example_output": "(디버거 없이 실행하면 아무 출력 없음; 디버거로 실행하면 \"Debugger detected via ProcessDebugPort\" 출력)",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "ntdll.dll이 제공하는 Native API로, kernel32.dll의 대부분의 안티디버깅/프로세스 조회 API보다 더 낮은 레벨에서 커널의 EPROCESS 구조체 정보를 직접 조회한다. IsDebuggerPresent/CheckRemoteDebuggerPresent가 내부적으로 이 함수를 호출하는 경로를 갖는 것으로 알려져 있어, 이 함수 자체를 우회하면 상위 API들도 함께 무력화되는 경우가 많다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "GetProcAddress로 동적으로 주소를 얻어 호출하는 경우가 많아 IAT에 이름이 남지 않고, IsDebuggerPresent 같은 상위 레벨 후킹을 우회한다 - CTF에서 '디버거를 붙였는데 왜 계속 탐지되지?'의 원인이 되는 대표적인 저수준 기법이다. ProcessDebugPort(0x7) 값이 0이 아니면 디버거 존재, ProcessDebugObjectHandle(0x1E) 조회 시 오류가 나지 않으면 디버거 존재, ProcessDebugFlags(0x1F)가 0이면 디버거 존재로 판단하는 세 가지 변형이 모두 CTF에서 등장한다.",
+      "decompiler_pattern": "NtQueryInformationProcess(GetCurrentProcess(), 7, &debugPort, 8, 0);\nif ( debugPort )\n  ExitProcess(1);",
+      "ida_example": "v3 = NtQueryInformationProcess(hProcess, 7, &ProcessInformation, 8, 0);\nif ( ProcessInformation )\n  sub_401400();"
+    },
+    "assembly_pattern": "GetProcAddress로 동적 로드 후 call rax 형태로 간접 호출되는 경우가 많아, IDA에서 함수 이름이 바로 보이지 않고 문자열 \"NtQueryInformationProcess\"를 먼저 추적해야 하는 경우가 있다.",
+    "pitfalls": [
+      "ProcessInformationLength가 실제 정보 크기와 맞지 않으면 STATUS_INFO_LENGTH_MISMATCH가 반환될 수 있다.",
+      "정보 클래스 번호(7, 0x1E, 0x1F 등)만 보고도 안티디버깅 코드임을 즉시 알아챌 수 있어야 하는 대표적인 매직 넘버 패턴이다.",
+      "PROCESSINFOCLASS 열거형은 공식적으로 완전히 문서화되어 있지 않으므로 버전별로 값이 추가/변경될 수 있음에 주의."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "ptrace(PTRACE_TRACEME) 실패 여부 / /proc/self/status의 TracerPid 확인", "windows": "NtQueryInformationProcess" },
+    "related": ["win-isdebuggerpresent", "win-checkremotedebuggerpresent", "posix-ptrace"],
+    "tags": ["anti-debugging", "anti-debug", "ProcessDebugPort", "NtQueryInformationProcess", "ntdll", "Native API", "저수준 안티디버깅", "매직 넘버"],
+    "sources": [
+      { "title": "Microsoft Learn - ZwQueryInformationProcess routine", "url": "https://learn.microsoft.com/windows-hardware/drivers/ddi/ntddk/nf-ntddk-zwqueryinformationprocess" }
+    ]
+  }
+]

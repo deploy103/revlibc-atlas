@@ -1,0 +1,61 @@
+[
+  {
+    "id": "win-virtualprotect",
+    "type": "function",
+    "name": "VirtualProtect",
+    "aliases": [],
+    "category": "memory",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "memoryapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "BOOL VirtualProtect(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect, PDWORD lpflOldProtect);",
+    "summary": "지정한 가상 메모리 영역의 페이지 보호 속성을 변경한다 (mprotect의 Windows 대응).",
+    "parameters": [
+      { "name": "lpAddress", "type": "LPVOID", "desc": "보호 속성을 바꿀 페이지 영역의 시작 주소", "direction": "in", "nullable": false },
+      { "name": "dwSize", "type": "SIZE_T", "desc": "영역 크기(바이트)", "direction": "in", "nullable": false },
+      { "name": "flNewProtect", "type": "DWORD", "desc": "새로 적용할 PAGE_* 보호 상수", "direction": "in", "nullable": false },
+      { "name": "lpflOldProtect", "type": "PDWORD", "desc": "이전 보호 속성이 저장될 출력 버퍼. NULL을 넘기면 실패한다.", "direction": "out", "nullable": false }
+    ],
+    "return_value": {
+      "success": "0이 아닌 값 (true)",
+      "failure": "0 (false)",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "PAGE_NOACCESS", "decimal": 1, "hex": "0x01", "desc": "접근 불가" },
+      { "name": "PAGE_READONLY", "decimal": 2, "hex": "0x02", "desc": "읽기 전용" },
+      { "name": "PAGE_READWRITE", "decimal": 4, "hex": "0x04", "desc": "읽기+쓰기" },
+      { "name": "PAGE_WRITECOPY", "decimal": 8, "hex": "0x08", "desc": "copy-on-write" },
+      { "name": "PAGE_EXECUTE", "decimal": 16, "hex": "0x10", "desc": "실행 전용" },
+      { "name": "PAGE_EXECUTE_READ", "decimal": 32, "hex": "0x20", "desc": "실행+읽기" },
+      { "name": "PAGE_EXECUTE_READWRITE", "decimal": 64, "hex": "0x40", "desc": "실행+읽기+쓰기 (RWX) - mprotect의 prot=7과 같은 의도로 가장 자주 등장" },
+      { "name": "PAGE_EXECUTE_WRITECOPY", "decimal": 128, "hex": "0x80", "desc": "실행+copy-on-write" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    DWORD oldProtect;\n    BYTE *mem = (BYTE *)VirtualAlloc(NULL, 4096, MEM_COMMIT, PAGE_READWRITE);\n\n    if (VirtualProtect(mem, 4096, PAGE_EXECUTE_READWRITE, &oldProtect)) {\n        printf(\"now executable\\n\");\n    }\n    return 0;\n}\n",
+    "example_output": "now executable\n",
+    "compile_cmd": "cl example.c  (MSVC) 또는 x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "mprotect와 마찬가지로 페이지 테이블의 보호 비트를 수정한다. 이전 보호 속성은 반드시 lpflOldProtect로 반환되므로 이 인자에 유효한 DWORD 포인터를 넘겨야 한다(NULL이면 실패).",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "flNewProtect가 PAGE_EXECUTE_READWRITE(0x40)이면 Linux의 mprotect(..., 7)과 동일한 의도(RWX)다. 패커, 인젝션 셸코드, 런타임 복호화 루틴에서 언패킹된 코드를 실행하기 직전에 흔히 호출된다.",
+      "decompiler_pattern": "VirtualProtect(mem, size, PAGE_EXECUTE_READWRITE, &oldProtect);\n((void(*)())mem)();",
+      "ida_example": "VirtualProtect(v3, 0x1000u, 0x40u, &flOldProtect);\n((void (__fastcall *)(_QWORD))v3)(0);"
+    },
+    "assembly_pattern": "kernel32.dll의 IAT를 통해 call ds:VirtualProtect 형태로 호출된다. GetProcAddress로 런타임에 주소를 얻어 호출하는 경우 IAT에 이름이 남지 않으므로, 상수 데이터에서 문자열 \"VirtualProtect\"를 먼저 찾아야 할 수도 있다.",
+    "pitfalls": [
+      "lpflOldProtect에 NULL을 넘기면 실패한다 (mprotect와 달리 이 출력 인자가 필수).",
+      "반환값은 BOOL이며 0이 실패다 - mprotect(0=성공)와 성공/실패 값의 의미가 반대라서 혼동하기 쉽다."
+    ],
+    "security_notes": "PAGE_EXECUTE_READWRITE 페이지는 DEP 우회/셸코드 실행의 전형적 신호다. 다만 JIT 엔진 등 합법적인 사용도 있으므로 문맥을 함께 판단해야 한다.",
+    "equivalents": { "linux": "mprotect", "windows": "VirtualProtect" },
+    "related": ["posix-mprotect", "win-virtualalloc", "win-isdebuggerpresent"],
+    "tags": ["RWX", "0x40", "PAGE_EXECUTE_READWRITE", "shellcode", "DEP bypass", "unpacking", "VirtualProtect 0x40"],
+    "sources": [
+      { "title": "Microsoft Learn - VirtualProtect function", "url": "https://learn.microsoft.com/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect" },
+      { "title": "Microsoft Learn - Memory Protection Constants", "url": "https://learn.microsoft.com/windows/win32/memory/memory-protection-constants" }
+    ]
+  }
+]

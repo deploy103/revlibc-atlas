@@ -1,0 +1,845 @@
+[
+  {
+    "id": "win-virtualalloc",
+    "type": "function",
+    "name": "VirtualAlloc",
+    "aliases": ["VirtualAllocEx (원격 버전)"],
+    "category": "memory",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "memoryapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "LPVOID VirtualAlloc(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect);",
+    "summary": "호출 프로세스의 가상 주소 공간에 페이지를 예약(reserve)하거나 커밋(commit)하여 새 메모리 영역을 할당한다 (mmap의 Windows 대응).",
+    "parameters": [
+      { "name": "lpAddress", "type": "LPVOID", "desc": "원하는 시작 주소. 보통 NULL을 넘겨 시스템이 자동으로 주소를 고르게 한다.", "direction": "in", "nullable": true },
+      { "name": "dwSize", "type": "SIZE_T", "desc": "할당할 크기(바이트). 내부적으로 페이지 크기 단위로 올림된다.", "direction": "in", "nullable": false },
+      { "name": "flAllocationType", "type": "DWORD", "desc": "MEM_COMMIT / MEM_RESERVE 등을 OR로 조합", "direction": "in", "nullable": false },
+      { "name": "flProtect", "type": "DWORD", "desc": "커밋 시 적용할 PAGE_* 보호 상수", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "할당된 영역의 시작 주소 (0이 아닌 포인터)",
+      "failure": "NULL",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "MEM_COMMIT", "decimal": 4096, "hex": "0x1000", "desc": "실제 물리 메모리(페이지파일)를 커밋하여 즉시 사용 가능하게 함" },
+      { "name": "MEM_RESERVE", "decimal": 8192, "hex": "0x2000", "desc": "주소 공간만 예약, 실제 커밋은 하지 않음" },
+      { "name": "MEM_RESET", "decimal": 524288, "hex": "0x80000", "desc": "페이지 내용을 더 이상 필요 없다고 표시 (내용 보존 안함)" },
+      { "name": "PAGE_READWRITE", "decimal": 4, "hex": "0x04", "desc": "읽기+쓰기, 실행 불가 - RWX를 바로 노출시키지 않는 스텔스 인젝션에서 1단계로 사용" },
+      { "name": "PAGE_EXECUTE_READWRITE", "decimal": 64, "hex": "0x40", "desc": "읽기+쓰기+실행 (RWX) - 셸코드를 즉시 실행 가능하게 할당하는 가장 흔한 패턴" },
+      { "name": "PAGE_NOACCESS", "decimal": 1, "hex": "0x01", "desc": "접근 불가 (가드 페이지 등)" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n#include <string.h>\n\nint main(void)\n{\n    unsigned char code[] = { 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 }; /* mov eax, 42; ret */\n    void *mem = VirtualAlloc(NULL, sizeof(code), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);\n\n    if (!mem) {\n        printf(\"alloc failed: %lu\\n\", GetLastError());\n        return 1;\n    }\n    memcpy(mem, code, sizeof(code));\n\n    int (*func)(void) = (int (*)(void))mem;\n    printf(\"result = %d\\n\", func());\n\n    VirtualFree(mem, 0, MEM_RELEASE);\n    return 0;\n}\n",
+    "example_output": "result = 42\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe  (또는 MSVC의 cl example.c)",
+    "internals": "내부적으로 NtAllocateVirtualMemory(ntdll)를 감싸는 wrapper로, 프로세스의 페이지 테이블을 조작한다. MEM_RESERVE만 지정하면 주소 공간 범위만 예약되고 실제 페이지는 커밋되지 않아 접근 시 access violation이 난다 - 반드시 MEM_COMMIT이 있어야 읽고 쓸 수 있다. dwSize는 시스템 페이지 크기(보통 4096바이트) 단위로 올림된다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "언패킹/셸코드 인젝션의 전형적인 첫 단계. 두 가지 흐름이 모두 자주 보인다: (1) PAGE_EXECUTE_READWRITE로 한 번에 할당한 뒤 곧바로 셸코드를 memcpy/WriteProcessMemory로 기록하고 실행하는 '단순' 패턴 - RWX 페이지가 처음부터 보이므로 EDR/AV의 강한 시그니처가 된다. (2) PAGE_READWRITE로 할당해 데이터처럼 위장한 뒤, 복호화/압축 해제를 마치고 나서 win-virtualprotect로 실행 권한만 추가하는 '2단계' 패턴 - 언패커와 난독화된 로더에서 매우 흔하다. 둘 다 이후 win-createthread로 시작 주소를 넘겨 실행시키는 경우가 많다.",
+      "decompiler_pattern": "buf = VirtualAlloc(0, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);\nmemcpy(buf, payload, size);\n((void(*)())buf)();",
+      "ida_example": "v3 = VirtualAlloc(0LL, 0x1000ui64, 0x3000u, 0x40u);\nmemcpy(v3, &payload, size);\nCreateThread(0LL, 0LL, (LPTHREAD_START_ROUTINE)v3, 0LL, 0LL, 0LL);"
+    },
+    "assembly_pattern": "kernel32.dll IAT를 통해 call ds:VirtualAlloc. x64에서는 fastcall 컨벤션으로 rcx=lpAddress, rdx=dwSize, r8=flAllocationType, r9=flProtect에 값이 들어간다. GetProcAddress로 동적 resolve하면 IAT에 이름이 남지 않으므로 문자열 참조를 먼저 찾아야 할 수도 있다.",
+    "pitfalls": [
+      "flAllocationType은 MEM_COMMIT | MEM_RESERVE처럼 OR 조합으로 넘기는 경우가 대부분이다.",
+      "dwSize는 자동으로 페이지 크기 단위로 반올림되므로 요청한 크기 그대로 할당되지 않을 수 있다.",
+      "lpAddress에 특정 주소를 강제로 요청하면 ASLR 등의 이유로 실패할 수 있다."
+    ],
+    "security_notes": "PAGE_EXECUTE_READWRITE로 할당된 메모리는 셸코드 로더/패커의 강한 신호다. 다만 JIT 컴파일러 등 정상적인 사용례도 있으므로 호출 시점(직후 memcpy+실행 여부)과 함께 판단해야 한다.",
+    "equivalents": { "linux": "mmap(NULL, size, PROT_READ|PROT_WRITE[|PROT_EXEC], MAP_PRIVATE|MAP_ANONYMOUS, -1, 0)", "windows": "VirtualAlloc" },
+    "related": ["win-virtualfree", "win-virtualprotect", "win-createthread", "posix-mmap", "win-heapalloc"],
+    "tags": ["shellcode", "injection", "unpacking", "RWX", "MEM_COMMIT", "MEM_RESERVE", "mmap equivalent", "0x1000", "0x40"],
+    "sources": [
+      { "title": "Microsoft Learn - VirtualAlloc function", "url": "https://learn.microsoft.com/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc" },
+      { "title": "Microsoft Learn - Memory Protection Constants", "url": "https://learn.microsoft.com/windows/win32/memory/memory-protection-constants" }
+    ]
+  },
+  {
+    "id": "win-virtualfree",
+    "type": "function",
+    "name": "VirtualFree",
+    "aliases": ["VirtualFreeEx (원격 버전)"],
+    "category": "memory",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "memoryapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "BOOL VirtualFree(LPVOID lpAddress, SIZE_T dwSize, DWORD dwFreeType);",
+    "summary": "VirtualAlloc으로 예약/커밋한 가상 메모리 영역을 커밋 해제(decommit)하거나 완전히 해제(release)한다 (munmap의 Windows 대응).",
+    "parameters": [
+      { "name": "lpAddress", "type": "LPVOID", "desc": "해제할 영역의 주소. MEM_RELEASE 시에는 반드시 VirtualAlloc이 반환한 기준(base) 주소여야 한다.", "direction": "in", "nullable": false },
+      { "name": "dwSize", "type": "SIZE_T", "desc": "해제할 크기. MEM_RELEASE인 경우 반드시 0이어야 한다.", "direction": "in", "nullable": false },
+      { "name": "dwFreeType", "type": "DWORD", "desc": "MEM_DECOMMIT 또는 MEM_RELEASE", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "0이 아닌 값 (true)",
+      "failure": "0 (false)",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "MEM_DECOMMIT", "decimal": 16384, "hex": "0x4000", "desc": "페이지를 커밋 해제하지만 주소 공간 예약은 유지" },
+      { "name": "MEM_RELEASE", "decimal": 32768, "hex": "0x8000", "desc": "예약과 커밋을 모두 해제, 이때 dwSize는 반드시 0" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    void *mem = VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);\n    if (!mem) return 1;\n\n    BOOL ok = VirtualFree(mem, 0, MEM_RELEASE);\n    printf(\"freed = %d\\n\", ok);\n    return 0;\n}\n",
+    "example_output": "freed = 1\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "NtFreeVirtualMemory(ntdll)를 감싸는 wrapper. MEM_RELEASE는 페이지 테이블 엔트리를 완전히 제거해 주소 공간을 반환하고, MEM_DECOMMIT은 물리 메모리/페이지파일 커밋만 취소한 채 주소 공간 예약은 남긴다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "인젝션/언패킹 코드가 셸코드를 최종 목적지(예: 원격 프로세스, 다른 섹션)로 복사한 뒤 임시 스테이징 버퍼를 정리할 때 등장한다. 일부 패커는 안티포렌식 목적으로 압축 해제 버퍼를 실행 직후 즉시 해제해 메모리 덤프 분석을 어렵게 만든다.",
+      "decompiler_pattern": "VirtualFree(stagingBuf, 0, MEM_RELEASE);",
+      "ida_example": "VirtualFree(v3, 0LL, 0x8000u);"
+    },
+    "assembly_pattern": "call ds:VirtualFree (IAT 경유). dwSize=0, dwFreeType=0x8000(MEM_RELEASE) 조합이 상수로 바로 보이면 해제 지점을 특정하기 쉽다.",
+    "pitfalls": [
+      "MEM_RELEASE를 쓸 때 dwSize에 0이 아닌 값을 넘기면 실패한다.",
+      "lpAddress가 VirtualAlloc이 반환한 정확한 기준 주소가 아니면(오프셋이 더해진 주소 등) 실패한다.",
+      "이미 해제된 영역을 다시 해제하면 실패하며, 그 포인터를 계속 사용하면 access violation이 발생한다."
+    ],
+    "security_notes": "해제 직후 해당 메모리를 참조하는 use-after-free 버그를 유발할 수 있다.",
+    "equivalents": { "linux": "munmap(addr, length)", "windows": "VirtualFree" },
+    "related": ["win-virtualalloc", "posix-mmap"],
+    "tags": ["munmap equivalent", "MEM_RELEASE", "MEM_DECOMMIT", "cleanup", "anti-forensics"],
+    "sources": [
+      { "title": "Microsoft Learn - VirtualFree function", "url": "https://learn.microsoft.com/windows/win32/api/memoryapi/nf-memoryapi-virtualfree" }
+    ]
+  },
+  {
+    "id": "win-virtualquery",
+    "type": "function",
+    "name": "VirtualQuery",
+    "aliases": ["VirtualQueryEx (원격 버전)"],
+    "category": "memory",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "memoryapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "SIZE_T VirtualQuery(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION lpBuffer, SIZE_T dwLength);",
+    "summary": "지정한 주소를 포함하는 페이지 영역의 상태/보호 속성/타입 정보를 MEMORY_BASIC_INFORMATION 구조체로 조회한다.",
+    "parameters": [
+      { "name": "lpAddress", "type": "LPCVOID", "desc": "정보를 조회할 영역 내의 임의의 주소", "direction": "in", "nullable": false },
+      { "name": "lpBuffer", "type": "PMEMORY_BASIC_INFORMATION", "desc": "결과가 채워질 MEMORY_BASIC_INFORMATION 버퍼", "direction": "out", "nullable": false },
+      { "name": "dwLength", "type": "SIZE_T", "desc": "lpBuffer의 크기 (보통 sizeof(MEMORY_BASIC_INFORMATION))", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "실제로 반환된 바이트 수 (0이 아님)",
+      "failure": "0",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "MEM_COMMIT", "decimal": 4096, "hex": "0x1000", "desc": "State: 커밋된 페이지" },
+      { "name": "MEM_RESERVE", "decimal": 8192, "hex": "0x2000", "desc": "State: 예약만 된 페이지" },
+      { "name": "MEM_FREE", "decimal": 65536, "hex": "0x10000", "desc": "State: 사용 가능한(할당되지 않은) 영역" },
+      { "name": "MEM_IMAGE", "decimal": 16777216, "hex": "0x1000000", "desc": "Type: PE 이미지(모듈)로 매핑된 영역" },
+      { "name": "MEM_MAPPED", "decimal": 262144, "hex": "0x40000", "desc": "Type: 매핑된 파일 영역" },
+      { "name": "MEM_PRIVATE", "decimal": 131072, "hex": "0x20000", "desc": "Type: private 메모리 (VirtualAlloc으로 만든 일반 메모리)" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    MEMORY_BASIC_INFORMATION mbi;\n    void *mem = VirtualAlloc(NULL, 4096, MEM_COMMIT, PAGE_READWRITE);\n\n    VirtualQuery(mem, &mbi, sizeof(mbi));\n    printf(\"BaseAddress=%p State=0x%lx Protect=0x%lx Type=0x%lx\\n\",\n           mbi.BaseAddress, mbi.State, mbi.Protect, mbi.Type);\n    return 0;\n}\n",
+    "example_output": "BaseAddress=0000020F12340000 State=0x1000 Protect=0x4 Type=0x20000\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "NtQueryVirtualMemory(ntdll)를 감싼 wrapper로, 대상 주소가 속한 연속된 페이지 영역(같은 속성을 공유하는 범위) 전체에 대한 정보를 한 번에 채워준다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "메모리를 스캔하는 모든 도구/셸코드의 기본 도구. 자기 자신의 이미지 무결성 검사, 코드 케이브(code cave) 탐색, 수동 PE 매핑 시 빈 영역 탐색, 후킹 탐지(특정 페이지의 Protect가 예상과 다른지 확인), 그리고 PEB.Ldr을 순회하지 않고 주소 범위를 스캔해 모듈 베이스를 역으로 찾아내는 기법 등에서 반복 호출된다.",
+      "decompiler_pattern": "while (addr < limit) {\n  VirtualQuery(addr, &mbi, sizeof(mbi));\n  if (mbi.Protect == PAGE_EXECUTE_READWRITE) { /* RWX 페이지 발견 */ }\n  addr = (char*)mbi.BaseAddress + mbi.RegionSize;\n}",
+      "ida_example": "VirtualQuery(v4, &Buffer, 0x30ui64);\nif ( Buffer.Protect == 0x40 )\n  sub_401200(Buffer.BaseAddress);"
+    },
+    "assembly_pattern": "call ds:VirtualQuery. 반환된 MEMORY_BASIC_INFORMATION 구조체는 스택 또는 힙에 위치하며, 이후 mbi.Protect/mbi.State 필드에 대한 오프셋 접근(cmp dword ptr [rbp+offset], 40h 등)으로 이어진다.",
+    "pitfalls": [
+      "쿼리 대상 주소가 아직 예약/커밋되지 않은 영역이면 State가 MEM_FREE로 반환되고 Protect 필드는 의미가 없다.",
+      "반환값이 항상 sizeof(MEMORY_BASIC_INFORMATION)인 것은 아니며, 32비트/64비트에 따라 구조체 크기가 다르다."
+    ],
+    "security_notes": "정상 도구(디버거, 프로파일러)와 악성코드(자기 무결성 검사, anti-tamper) 양쪽에서 흔히 쓰이므로 이 함수만으로 악성 여부를 판단할 수는 없다.",
+    "equivalents": { "linux": "/proc/[pid]/maps 파싱 (직접 대응 syscall 없음)", "windows": "VirtualQuery" },
+    "related": ["win-virtualalloc", "win-virtualprotect"],
+    "tags": ["MEMORY_BASIC_INFORMATION", "memory scan", "code cave", "module base", "hook detection", "self-integrity check"],
+    "sources": [
+      { "title": "Microsoft Learn - VirtualQuery function", "url": "https://learn.microsoft.com/windows/win32/api/memoryapi/nf-memoryapi-virtualquery" },
+      { "title": "Microsoft Learn - MEMORY_BASIC_INFORMATION structure", "url": "https://learn.microsoft.com/windows/win32/api/winnt/ns-winnt-memory_basic_information" }
+    ]
+  },
+  {
+    "id": "win-heapalloc",
+    "type": "function",
+    "name": "HeapAlloc",
+    "aliases": [],
+    "category": "memory",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "heapapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "DECLSPEC_ALLOCATOR LPVOID HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);",
+    "summary": "지정한 힙에서 지정한 크기의 메모리 블록을 할당한다 (CRT malloc이 내부적으로 감싸는 저수준 함수).",
+    "parameters": [
+      { "name": "hHeap", "type": "HANDLE", "desc": "할당할 힙의 핸들. 보통 GetProcessHeap()의 반환값", "direction": "in", "nullable": false },
+      { "name": "dwFlags", "type": "DWORD", "desc": "HEAP_ZERO_MEMORY 등의 플래그", "direction": "in", "nullable": false },
+      { "name": "dwBytes", "type": "SIZE_T", "desc": "할당할 크기(바이트)", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "할당된 메모리 블록의 포인터",
+      "failure": "NULL (HEAP_GENERATE_EXCEPTIONS가 설정되면 예외 발생)",
+      "meaning": "실패 시 GetLastError()로 원인을 확인할 수 있다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "HEAP_ZERO_MEMORY", "decimal": 8, "hex": "0x00000008", "desc": "할당한 메모리를 0으로 초기화 (calloc과 유사)" },
+      { "name": "HEAP_GENERATE_EXCEPTIONS", "decimal": 4, "hex": "0x00000004", "desc": "실패 시 NULL 대신 구조적 예외 발생" },
+      { "name": "HEAP_NO_SERIALIZE", "decimal": 1, "hex": "0x00000001", "desc": "스레드 동기화(직렬화) 생략" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n#include <string.h>\n\nint main(void)\n{\n    HANDLE heap = GetProcessHeap();\n    char *buf = (char *)HeapAlloc(heap, HEAP_ZERO_MEMORY, 32);\n\n    if (buf) {\n        strcpy(buf, \"hello heap\");\n        printf(\"%s\\n\", buf);\n        HeapFree(heap, 0, buf);\n    }\n    return 0;\n}\n",
+    "example_output": "hello heap\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "프로세스가 시작되면 기본 힙(default process heap)이 만들어지며 GetProcessHeap()으로 그 핸들을 얻는다. CRT의 malloc/calloc/free는 (기본 설정에서) 결국 HeapAlloc/HeapFree를 감싸는 wrapper이며, /NODEFAULTLIB 등으로 CRT 없이 빌드된 셸코드/로더는 HeapAlloc을 직접 호출하는 경우가 많다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "CRT 없이(또는 최소한의 CRT로) 빌드된 드로퍼/로더 바이너리에서 malloc 대신 GetProcessHeap()+HeapAlloc 조합이 직접 보이면, 정적 CRT 링크 없이 API만으로 동작하도록 만든 페이로드일 가능성이 높다. 다운로드한 파일이나 복호화한 페이로드를 임시로 담는 버퍼로 자주 쓰이며, 이후 실행이 필요하면 VirtualAlloc(RWX)으로 다시 복사되는 흐름과 짝을 이루기도 한다.",
+      "decompiler_pattern": "buf = HeapAlloc(GetProcessHeap(), 0, size);\nmemcpy(buf, encrypted, size);\ndecrypt(buf, size, key);",
+      "ida_example": "v1 = HeapAlloc(GetProcessHeap(), 0, (unsigned __int64)dwSize);"
+    },
+    "assembly_pattern": "call ds:GetProcessHeap 직후 call ds:HeapAlloc이 연달아 나오는 패턴이 흔하다.",
+    "pitfalls": [
+      "dwBytes가 0이어도 유효한 (역참조하면 안 되는) 포인터를 반환할 수 있다.",
+      "HeapAlloc으로 받은 포인터는 반드시 같은 힙에 대해 HeapFree로 해제해야 한다."
+    ],
+    "security_notes": "힙 오버플로우/UAF 취약점 분석 시 malloc 대신 HeapAlloc 직접 호출 지점을 추적해야 하는 경우가 있다.",
+    "equivalents": { "linux": "malloc(size)", "windows": "HeapAlloc(GetProcessHeap(), 0, size)" },
+    "related": ["win-heapfree", "win-virtualalloc"],
+    "tags": ["malloc equivalent", "GetProcessHeap", "heap allocation", "CRT-less loader"],
+    "sources": [
+      { "title": "Microsoft Learn - HeapAlloc function", "url": "https://learn.microsoft.com/windows/win32/api/heapapi/nf-heapapi-heapalloc" }
+    ]
+  },
+  {
+    "id": "win-heapfree",
+    "type": "function",
+    "name": "HeapFree",
+    "aliases": [],
+    "category": "memory",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "heapapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "BOOL HeapFree(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem);",
+    "summary": "HeapAlloc(또는 HeapReAlloc)으로 할당한 메모리 블록을 해제한다 (free의 저수준 대응).",
+    "parameters": [
+      { "name": "hHeap", "type": "HANDLE", "desc": "메모리가 할당된 힙의 핸들", "direction": "in", "nullable": false },
+      { "name": "dwFlags", "type": "DWORD", "desc": "HEAP_NO_SERIALIZE 등, 보통 0", "direction": "in", "nullable": false },
+      { "name": "lpMem", "type": "LPVOID", "desc": "해제할 메모리 블록의 포인터. NULL이면 아무 동작도 하지 않고 성공 처리된다.", "direction": "in", "nullable": true }
+    ],
+    "return_value": {
+      "success": "0이 아닌 값 (true)",
+      "failure": "0 (false)",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "HEAP_NO_SERIALIZE", "decimal": 1, "hex": "0x00000001", "desc": "스레드 동기화(직렬화) 생략" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    HANDLE heap = GetProcessHeap();\n    void *buf = HeapAlloc(heap, 0, 16);\n\n    BOOL ok = HeapFree(heap, 0, buf);\n    printf(\"freed = %d\\n\", ok);\n    return 0;\n}\n",
+    "example_output": "freed = 1\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "힙 관리자의 free list에 블록을 반환하며, 힙 매니저는 이후 재사용을 위해 인접 free 블록과 병합(coalescing)을 시도할 수 있다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "HeapAlloc과 짝을 이뤄 힙 취약점(double free, use-after-free) 분석의 대상이 된다. free된 포인터의 라이프사이클을 IDA/Ghidra에서 추적할 때 HeapFree 호출 지점을 기준으로 이후 동일 포인터 사용 여부를 확인하는 것이 UAF 탐지의 기본이다.",
+      "decompiler_pattern": "HeapFree(hHeap, 0, buf);\n/* 이후 buf를 다시 사용하면 UAF */",
+      "ida_example": "HeapFree(hHeap, 0, v3);\nv3 = 0LL;"
+    },
+    "assembly_pattern": "call ds:HeapFree. free 이후에도 원본 포인터 변수가 초기화(NULL)되지 않고 재사용되면 UAF 후보 지점이다.",
+    "pitfalls": [
+      "이미 해제된 포인터를 다시 HeapFree에 넘기면(double free) 힙 손상이 발생할 수 있다.",
+      "다른 힙(hHeap 불일치)에서 할당된 포인터를 넘기면 실패하거나 손상을 유발한다."
+    ],
+    "security_notes": "double free / use-after-free 패턴 분석 시 HeapAlloc/HeapFree 호출 쌍을 추적하는 것이 기본 절차다.",
+    "equivalents": { "linux": "free(ptr)", "windows": "HeapFree(GetProcessHeap(), 0, ptr)" },
+    "related": ["win-heapalloc"],
+    "tags": ["free equivalent", "use-after-free", "double free", "heap corruption"],
+    "sources": [
+      { "title": "Microsoft Learn - HeapFree function", "url": "https://learn.microsoft.com/windows/win32/api/heapapi/nf-heapapi-heapfree" }
+    ]
+  },
+  {
+    "id": "win-createprocessa",
+    "type": "function",
+    "name": "CreateProcessA",
+    "aliases": ["CreateProcess"],
+    "category": "process",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "processthreadsapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "BOOL CreateProcessA(LPCSTR lpApplicationName, LPSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment, LPCSTR lpCurrentDirectory, LPSTARTUPINFOA lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation);",
+    "summary": "새 프로세스와 그 기본(primary) 스레드를 생성하여 지정한 실행 파일을 실행한다 (ANSI 문자열 버전).",
+    "parameters": [
+      { "name": "lpApplicationName", "type": "LPCSTR", "desc": "실행할 모듈의 경로. NULL이면 lpCommandLine의 첫 토큰을 사용", "direction": "in", "nullable": true },
+      { "name": "lpCommandLine", "type": "LPSTR", "desc": "명령줄 전체. 반드시 쓰기 가능한 버퍼여야 한다(내부에서 수정 가능).", "direction": "inout", "nullable": true },
+      { "name": "lpProcessAttributes", "type": "LPSECURITY_ATTRIBUTES", "desc": "프로세스 핸들의 보안/상속 속성, 보통 NULL", "direction": "in", "nullable": true },
+      { "name": "lpThreadAttributes", "type": "LPSECURITY_ATTRIBUTES", "desc": "스레드 핸들의 보안/상속 속성, 보통 NULL", "direction": "in", "nullable": true },
+      { "name": "bInheritHandles", "type": "BOOL", "desc": "호출자의 상속 가능한 핸들을 새 프로세스가 물려받을지 여부", "direction": "in", "nullable": false },
+      { "name": "dwCreationFlags", "type": "DWORD", "desc": "CREATE_SUSPENDED 등 생성 플래그 조합", "direction": "in", "nullable": false },
+      { "name": "lpEnvironment", "type": "LPVOID", "desc": "새 프로세스의 환경 변수 블록, NULL이면 호출자 환경을 상속", "direction": "in", "nullable": true },
+      { "name": "lpCurrentDirectory", "type": "LPCSTR", "desc": "새 프로세스의 현재 디렉터리, NULL이면 호출자와 동일", "direction": "in", "nullable": true },
+      { "name": "lpStartupInfo", "type": "LPSTARTUPINFOA", "desc": "창 표시 방식 등 시작 정보, sizeof(STARTUPINFOA)를 cb에 설정해야 함", "direction": "in", "nullable": false },
+      { "name": "lpProcessInformation", "type": "LPPROCESS_INFORMATION", "desc": "생성된 프로세스/스레드의 핸들과 ID가 채워지는 출력 구조체", "direction": "out", "nullable": false }
+    ],
+    "return_value": {
+      "success": "0이 아닌 값 (true)",
+      "failure": "0 (false)",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다. 성공 시 lpProcessInformation.hProcess/hThread는 반드시 CloseHandle로 닫아야 한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "CREATE_SUSPENDED", "decimal": 4, "hex": "0x00000004", "desc": "기본 스레드를 실행하지 않고 정지 상태로 생성 - 프로세스 인젝션/홀로잉의 핵심 플래그" },
+      { "name": "DETACHED_PROCESS", "decimal": 8, "hex": "0x00000008", "desc": "콘솔 없이 실행" },
+      { "name": "CREATE_NEW_CONSOLE", "decimal": 16, "hex": "0x00000010", "desc": "새 콘솔 창에서 실행" },
+      { "name": "CREATE_NO_WINDOW", "decimal": 134217728, "hex": "0x08000000", "desc": "창을 표시하지 않음 (콘솔 앱을 숨겨서 실행할 때 흔함)" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    STARTUPINFOA si = { sizeof(si) };\n    PROCESS_INFORMATION pi;\n    char cmdline[] = \"notepad.exe\";\n\n    if (CreateProcessA(NULL, cmdline, NULL, NULL, FALSE,\n                        CREATE_SUSPENDED, NULL, NULL, &si, &pi)) {\n        printf(\"created pid=%lu (suspended)\\n\", pi.dwProcessId);\n        /* 여기서 WriteProcessMemory + SetThreadContext로 코드를 주입할 수 있다 */\n        ResumeThread(pi.hThread);\n        CloseHandle(pi.hThread);\n        CloseHandle(pi.hProcess);\n    }\n    return 0;\n}\n",
+    "example_output": "created pid=4821 (suspended)\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "내부적으로 새 프로세스 오브젝트와 주소 공간을 만들고 PE 로더가 실행 파일과 필요한 DLL들을 매핑한 뒤, 기본 스레드를 CREATE_SUSPENDED가 없으면 즉시 실행 상태로 스케줄링한다. CREATE_SUSPENDED가 있으면 기본 스레드는 생성되지만 진입점 실행 전 정지 상태로 남는다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "프로세스 인젝션/프로세스 홀로잉(process hollowing)의 시작점이다. 전형적 체인: CreateProcessA/W(..., CREATE_SUSPENDED, ...) 로 정지된 새 프로세스를 만든 뒤 -> (홀로잉이면 NtUnmapViewOfSection으로 원본 이미지 언맵) -> VirtualAllocEx/WriteProcessMemory로 페이로드를 원격 프로세스에 기록 -> GetThreadContext/SetThreadContext로 엔트리포인트 조작 -> ResumeThread로 실행 재개. Linux의 fork()+execve() 두 단계 조합과 근본적으로 다르다: fork는 '현재 프로세스를 복제'만 하고 execve가 별도로 이미지를 교체하는 2단계이지만, CreateProcess는 프로세스 생성과 지정한 실행 파일의 로드·실행까지 단일 호출로 끝낸다 - 그래서 Windows에는 fork에 해당하는 API가 없고, '자식에서 복제 후 이미지 교체' 패턴 대신 '처음부터 새 이미지로 생성하고 필요하면 그 사이(CREATE_SUSPENDED)에 끼어드는' 패턴이 인젝션의 표준이 된다.",
+      "decompiler_pattern": "CreateProcessA(0, \"cmd.exe\", 0, 0, 0, 4u /*CREATE_SUSPENDED*/, 0, 0, &si, &pi);\nWriteProcessMemory(pi.hProcess, remoteAddr, payload, size, 0);\nSetThreadContext(pi.hThread, &ctx);\nResumeThread(pi.hThread);",
+      "ida_example": "CreateProcessA(0LL, CommandLine, 0LL, 0LL, 0, 4u, 0LL, 0LL, &StartupInfo, &ProcessInformation);\nResumeThread(ProcessInformation.hThread);"
+    },
+    "assembly_pattern": "call ds:CreateProcessA (IAT 경유). dwCreationFlags 인자로 상수 4(0x4, CREATE_SUSPENDED)가 스택/레지스터에 바로 보이면 인젝션 후보로 우선 표시할 만하다.",
+    "pitfalls": [
+      "lpCommandLine은 쓰기 가능한 버퍼여야 한다 - 문자열 리터럴(읽기 전용 메모리)을 그대로 넘기면 크래시할 수 있다.",
+      "lpApplicationName과 lpCommandLine이 둘 다 NULL이면 실패한다.",
+      "성공 후 반환된 hProcess/hThread를 CloseHandle로 닫지 않으면 핸들 누수가 발생한다."
+    ],
+    "security_notes": "CREATE_SUSPENDED 플래그와 뒤이은 Write/SetThreadContext 호출 조합은 프로세스 홀로잉/인젝션의 강한 지표다.",
+    "equivalents": { "linux": "fork() + execve() (두 단계)", "windows": "CreateProcessA/W (단일 호출로 생성+실행)" },
+    "related": ["win-createprocessw", "posix-fork", "posix-execve", "win-openprocess", "win-createthread", "win-resumethread"],
+    "tags": ["process injection", "process hollowing", "CREATE_SUSPENDED", "fork exec", "SetThreadContext"],
+    "sources": [
+      { "title": "Microsoft Learn - CreateProcessA function", "url": "https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessa" },
+      { "title": "Microsoft Learn - Process Creation Flags", "url": "https://learn.microsoft.com/windows/win32/procthread/process-creation-flags" }
+    ]
+  },
+  {
+    "id": "win-createprocessw",
+    "type": "function",
+    "name": "CreateProcessW",
+    "aliases": ["CreateProcess"],
+    "category": "process",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "processthreadsapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "BOOL CreateProcessW(LPCWSTR lpApplicationName, LPWSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation);",
+    "summary": "새 프로세스와 그 기본 스레드를 생성하여 지정한 실행 파일을 실행한다 (유니코드/와이드 문자열 버전).",
+    "parameters": [
+      { "name": "lpApplicationName", "type": "LPCWSTR", "desc": "실행할 모듈의 경로 (와이드 문자열). NULL이면 lpCommandLine의 첫 토큰을 사용", "direction": "in", "nullable": true },
+      { "name": "lpCommandLine", "type": "LPWSTR", "desc": "명령줄 전체 (와이드 문자열). 반드시 쓰기 가능한 버퍼여야 한다.", "direction": "inout", "nullable": true },
+      { "name": "lpProcessAttributes", "type": "LPSECURITY_ATTRIBUTES", "desc": "프로세스 핸들의 보안/상속 속성, 보통 NULL", "direction": "in", "nullable": true },
+      { "name": "lpThreadAttributes", "type": "LPSECURITY_ATTRIBUTES", "desc": "스레드 핸들의 보안/상속 속성, 보통 NULL", "direction": "in", "nullable": true },
+      { "name": "bInheritHandles", "type": "BOOL", "desc": "호출자의 상속 가능한 핸들을 새 프로세스가 물려받을지 여부", "direction": "in", "nullable": false },
+      { "name": "dwCreationFlags", "type": "DWORD", "desc": "CREATE_SUSPENDED 등 생성 플래그 조합", "direction": "in", "nullable": false },
+      { "name": "lpEnvironment", "type": "LPVOID", "desc": "새 프로세스의 환경 변수 블록, NULL이면 호출자 환경을 상속", "direction": "in", "nullable": true },
+      { "name": "lpCurrentDirectory", "type": "LPCWSTR", "desc": "새 프로세스의 현재 디렉터리, NULL이면 호출자와 동일", "direction": "in", "nullable": true },
+      { "name": "lpStartupInfo", "type": "LPSTARTUPINFOW", "desc": "창 표시 방식 등 시작 정보, sizeof(STARTUPINFOW)를 cb에 설정해야 함", "direction": "in", "nullable": false },
+      { "name": "lpProcessInformation", "type": "LPPROCESS_INFORMATION", "desc": "생성된 프로세스/스레드의 핸들과 ID가 채워지는 출력 구조체", "direction": "out", "nullable": false }
+    ],
+    "return_value": {
+      "success": "0이 아닌 값 (true)",
+      "failure": "0 (false)",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다. 성공 시 lpProcessInformation.hProcess/hThread는 반드시 CloseHandle로 닫아야 한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "CREATE_SUSPENDED", "decimal": 4, "hex": "0x00000004", "desc": "기본 스레드를 실행하지 않고 정지 상태로 생성 - 프로세스 인젝션/홀로잉의 핵심 플래그" },
+      { "name": "CREATE_UNICODE_ENVIRONMENT", "decimal": 1024, "hex": "0x00000400", "desc": "lpEnvironment가 유니코드 환경 블록임을 의미" },
+      { "name": "CREATE_NO_WINDOW", "decimal": 134217728, "hex": "0x08000000", "desc": "창을 표시하지 않음" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    STARTUPINFOW si = { sizeof(si) };\n    PROCESS_INFORMATION pi;\n    wchar_t cmdline[] = L\"notepad.exe\";\n\n    if (CreateProcessW(NULL, cmdline, NULL, NULL, FALSE,\n                        CREATE_SUSPENDED, NULL, NULL, &si, &pi)) {\n        wprintf(L\"created pid=%lu (suspended)\\n\", pi.dwProcessId);\n        ResumeThread(pi.hThread);\n        CloseHandle(pi.hThread);\n        CloseHandle(pi.hProcess);\n    }\n    return 0;\n}\n",
+    "example_output": "created pid=4821 (suspended)\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "CreateProcessA와 완전히 동일한 커널 경로를 사용하며, 문자열이 UTF-16(와이드)라는 점만 다르다. CreateProcessA는 내부적으로 문자열을 유니코드로 변환한 뒤 사실상 CreateProcessW 경로로 전달한다 - 즉 실제 구현은 W 버전 쪽에 있다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "CreateProcessA와 동일하게 프로세스 인젝션/홀로잉의 시작점이다. 최근 악성코드/오펜시브 툴킷은 문자열 필터링(예: 'cmd.exe' 같은 ANSI 문자열 탐지)을 우회하기 위해 와이드 문자열(L\"cmd.exe\")과 함께 W 버전을 선호하는 경향이 있다. Linux의 fork+execve 2단계 조합과 달리 단일 호출로 생성+실행이 끝나는 점은 A 버전과 동일하다.",
+      "decompiler_pattern": "CreateProcessW(0, L\"cmd.exe\", 0, 0, 0, 4u /*CREATE_SUSPENDED*/, 0, 0, &si, &pi);\nWriteProcessMemory(pi.hProcess, remoteAddr, payload, size, 0);\nResumeThread(pi.hThread);",
+      "ida_example": "CreateProcessW(0LL, CommandLine, 0LL, 0LL, 0, 4u, 0LL, 0LL, &StartupInfo, &ProcessInformation);"
+    },
+    "assembly_pattern": "call ds:CreateProcessW (IAT 경유). 문자열 인자가 UTF-16이므로 IDA에서 L\"...\" 형태(2바이트 정렬, 널 워드 종료)로 표시된다.",
+    "pitfalls": [
+      "lpCommandLine 버퍼는 쓰기 가능해야 하며, 읽기 전용 와이드 문자열 리터럴을 그대로 넘기면 크래시할 수 있다.",
+      "ANSI/와이드 버퍼 크기 계산 실수(바이트 수 vs 문자 수)로 버퍼 오버런이 생기기 쉽다."
+    ],
+    "security_notes": "CREATE_SUSPENDED + 이후 WriteProcessMemory/SetThreadContext 조합은 인젝션의 강한 지표다.",
+    "equivalents": { "linux": "fork() + execve() (두 단계)", "windows": "CreateProcessA/W (단일 호출로 생성+실행)" },
+    "related": ["win-createprocessa", "posix-fork", "posix-execve", "win-openprocess", "win-createthread", "win-resumethread"],
+    "tags": ["process injection", "process hollowing", "CREATE_SUSPENDED", "fork exec", "unicode"],
+    "sources": [
+      { "title": "Microsoft Learn - CreateProcessW function", "url": "https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw" },
+      { "title": "Microsoft Learn - Process Creation Flags", "url": "https://learn.microsoft.com/windows/win32/procthread/process-creation-flags" }
+    ]
+  },
+  {
+    "id": "win-openprocess",
+    "type": "function",
+    "name": "OpenProcess",
+    "aliases": [],
+    "category": "process",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "processthreadsapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "HANDLE OpenProcess(DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwProcessId);",
+    "summary": "이미 실행 중인 프로세스에 대한 핸들을 연다. 다른 프로세스의 메모리를 읽거나 쓰거나 원격 스레드를 만들기 위한 전제조건이다.",
+    "parameters": [
+      { "name": "dwDesiredAccess", "type": "DWORD", "desc": "요청할 접근 권한 (PROCESS_* 상수의 OR 조합)", "direction": "in", "nullable": false },
+      { "name": "bInheritHandle", "type": "BOOL", "desc": "자식 프로세스가 이 핸들을 상속할지 여부", "direction": "in", "nullable": false },
+      { "name": "dwProcessId", "type": "DWORD", "desc": "대상 프로세스의 PID", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "대상 프로세스에 대한 핸들 (0이 아님)",
+      "failure": "NULL",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다 (권한 부족: ERROR_ACCESS_DENIED).",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "PROCESS_TERMINATE", "decimal": 1, "hex": "0x0001", "desc": "TerminateProcess 호출 권한" },
+      { "name": "PROCESS_CREATE_THREAD", "decimal": 2, "hex": "0x0002", "desc": "CreateRemoteThread 호출 권한" },
+      { "name": "PROCESS_VM_OPERATION", "decimal": 8, "hex": "0x0008", "desc": "VirtualAllocEx/VirtualProtectEx 등 원격 메모리 조작 권한" },
+      { "name": "PROCESS_VM_READ", "decimal": 16, "hex": "0x0010", "desc": "ReadProcessMemory 호출 권한" },
+      { "name": "PROCESS_VM_WRITE", "decimal": 32, "hex": "0x0020", "desc": "WriteProcessMemory 호출 권한" },
+      { "name": "PROCESS_QUERY_INFORMATION", "decimal": 1024, "hex": "0x0400", "desc": "GetExitCodeProcess 등 프로세스 정보 조회 권한" },
+      { "name": "PROCESS_ALL_ACCESS", "decimal": 2035711, "hex": "0x001F0FFF", "desc": "모든 권한 (Windows Vista SP1/Server 2008 이후 값; 구버전 Windows는 값이 다를 수 있음)" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    DWORD pid = GetCurrentProcessId();\n    HANDLE h = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, pid);\n\n    if (h) {\n        printf(\"opened handle to pid %lu\\n\", pid);\n        CloseHandle(h);\n    }\n    return 0;\n}\n",
+    "example_output": "opened handle to pid 4821\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "커널 오브젝트 매니저에서 대상 프로세스 오브젝트에 대한 참조를 추가하고, dwDesiredAccess에 대한 접근 검사(토큰/ACL 기반)를 통과해야 핸들이 발급된다. 관리자 권한이라도 보호된 프로세스(PPL)나 더 높은 무결성 수준의 프로세스에는 실패할 수 있다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "DLL 인젝션/코드 인젝션 체인의 필수 전제 조건이다 - 대상 PID에 대한 핸들 없이는 ReadProcessMemory, WriteProcessMemory, VirtualAllocEx, CreateRemoteThread를 전혀 호출할 수 없다. 흔히 PROCESS_ALL_ACCESS를 한 번에 요청하거나, 좀 더 은밀한 도구는 실제로 필요한 최소 권한(PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_CREATE_THREAD 등)만 요청해 탐지를 회피하려 한다.",
+      "decompiler_pattern": "HANDLE hProc = OpenProcess(PROCESS_ALL_ACCESS, FALSE, targetPid);\nLPVOID remote = VirtualAllocEx(hProc, 0, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);\nWriteProcessMemory(hProc, remote, shellcode, size, 0);\nCreateRemoteThread(hProc, 0, 0, remote, 0, 0, 0);",
+      "ida_example": "hProcess = OpenProcess(0x1F0FFFu, 0, dwProcessId);"
+    },
+    "assembly_pattern": "call ds:OpenProcess. dwDesiredAccess 상수 0x1F0FFF(PROCESS_ALL_ACCESS)가 바로 보이면 인젝션 코드일 가능성을 우선 검토한다.",
+    "pitfalls": [
+      "대상 프로세스가 보호된 프로세스(PPL)이거나 더 높은 무결성 수준이면 관리자 권한으로도 실패할 수 있다.",
+      "SeDebugPrivilege가 없으면 다른 사용자 세션/시스템 프로세스에 대한 OpenProcess가 실패할 수 있다.",
+      "성공한 핸들은 반드시 CloseHandle로 닫아야 한다."
+    ],
+    "security_notes": "PROCESS_ALL_ACCESS 또는 VM_WRITE+CREATE_THREAD 조합 요청은 EDR에서 크로스 프로세스 인젝션의 대표적 탐지 지점이다.",
+    "equivalents": { "linux": "직접 대응 없음 (ptrace(PTRACE_ATTACH, pid) 가 가장 가까운 개념)", "windows": "OpenProcess" },
+    "related": ["win-createprocessa", "win-createthread", "win-terminateprocess"],
+    "tags": ["DLL injection prerequisite", "ReadProcessMemory", "WriteProcessMemory", "CreateRemoteThread", "PROCESS_ALL_ACCESS"],
+    "sources": [
+      { "title": "Microsoft Learn - OpenProcess function", "url": "https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess" },
+      { "title": "Microsoft Learn - Process Security and Access Rights", "url": "https://learn.microsoft.com/windows/win32/procthread/process-security-and-access-rights" }
+    ]
+  },
+  {
+    "id": "win-terminateprocess",
+    "type": "function",
+    "name": "TerminateProcess",
+    "aliases": [],
+    "category": "process",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "processthreadsapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "BOOL TerminateProcess(HANDLE hProcess, UINT uExitCode);",
+    "summary": "지정한 프로세스와 그 안의 모든 스레드를 강제로 종료시킨다.",
+    "parameters": [
+      { "name": "hProcess", "type": "HANDLE", "desc": "종료할 프로세스의 핸들 (PROCESS_TERMINATE 권한 필요)", "direction": "in", "nullable": false },
+      { "name": "uExitCode", "type": "UINT", "desc": "프로세스와 모든 스레드에 사용될 종료 코드", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "0이 아닌 값 (true)",
+      "failure": "0 (false)",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다. 성공해도 종료가 비동기적으로 진행될 수 있다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    /* 데모: 자기 자신이 아닌 별도 프로세스를 종료하려면 OpenProcess로 얻은 핸들을 사용 */\n    HANDLE hSelf = GetCurrentProcess();\n    printf(\"about to terminate self with code 0\\n\");\n    TerminateProcess(hSelf, 0);\n    printf(\"this line never runs\\n\");\n    return 0;\n}\n",
+    "example_output": "about to terminate self with code 0\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "지정한 프로세스의 모든 스레드를 즉시 중단시키고 프로세스 오브젝트를 signaled 상태로 만든다. 일반적인 프로세스 종료(ExitProcess)와 달리 DLL_PROCESS_DETACH 알림이나 정상적인 정리(cleanup) 루틴을 건너뛸 수 있다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "안티 디버깅/안티 분석 루틴에서 디버거나 분석 도구(Process Hacker, procmon 등)를 탐지한 뒤 TerminateProcess(GetCurrentProcess(), 0)로 자가 종료하거나, 분석 대상 프로세스가 특정 조건에서 스스로를 죽여 동적 분석을 방해하는 데 사용된다. 드물게 다른 프로세스(보안 소프트웨어)를 대상으로 강제 종료를 시도하는 악성코드도 있다.",
+      "decompiler_pattern": "if (IsDebuggerPresent())\n  TerminateProcess(GetCurrentProcess(), 0);",
+      "ida_example": "if ( IsDebuggerPresent() )\n  TerminateProcess((HANDLE)-1, 0);"
+    },
+    "assembly_pattern": "call ds:TerminateProcess. hProcess 인자로 GetCurrentProcess()의 결과인 pseudo handle -1(0xFFFFFFFFFFFFFFFF)이 바로 보이면 자가 종료 패턴이다.",
+    "pitfalls": [
+      "TerminateProcess는 비동기적일 수 있어, 호출 직후에도 대상 프로세스가 완전히 종료되지 않았을 수 있다 (WaitForSingleObject로 확인 필요).",
+      "정상적인 종료 절차(DLL 언로드, 소멸자 등)를 건너뛰므로 리소스 누수/불완전한 정리를 유발할 수 있다."
+    ],
+    "security_notes": "자가 종료(GetCurrentProcess() 대상) 패턴은 안티 디버깅/안티 분석의 신호일 수 있다.",
+    "equivalents": { "linux": "kill(pid, SIGKILL)", "windows": "TerminateProcess" },
+    "related": ["win-getcurrentprocess", "win-openprocess"],
+    "tags": ["anti-debug", "self-terminate", "kill process", "SIGKILL equivalent"],
+    "sources": [
+      { "title": "Microsoft Learn - TerminateProcess function", "url": "https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess" }
+    ]
+  },
+  {
+    "id": "win-getcurrentprocess",
+    "type": "function",
+    "name": "GetCurrentProcess",
+    "aliases": [],
+    "category": "process",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "processthreadsapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "HANDLE GetCurrentProcess(void);",
+    "summary": "현재 프로세스를 가리키는 pseudo handle(값 -1)을 반환한다. 실제 커널 핸들 테이블 엔트리를 소비하지 않는다.",
+    "parameters": [],
+    "return_value": {
+      "success": "항상 성공, pseudo handle (HANDLE)-1 (0xFFFFFFFFFFFFFFFF)",
+      "failure": "해당 없음 (이 함수는 실패하지 않는다)",
+      "meaning": "반환된 값은 자기 자신을 의미하는 특수 상수이며 CloseHandle로 닫을 필요가 없다 (닫아도 무시됨).",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    HANDLE h = GetCurrentProcess();\n    printf(\"pseudo handle = %p\\n\", h);\n    return 0;\n}\n",
+    "example_output": "pseudo handle = FFFFFFFFFFFFFFFF\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "실제 핸들 테이블을 조회하지 않고 상수 -1을 그대로 반환하는 매크로에 가까운 함수다. TerminateProcess, VirtualProtect, GetProcessAffinityMask 등 '대상 프로세스 핸들'을 받는 API에 자기 자신을 지정할 때 사용된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "TerminateProcess(GetCurrentProcess(), 0) 형태로 안티 디버깅 루틴의 자가 종료에 자주 쓰인다. 디컴파일 결과에서 인자로 (HANDLE)-1이 상수로 그대로 보이면 실제로는 GetCurrentProcess()가 인라인/최적화된 것일 수 있다.",
+      "decompiler_pattern": "TerminateProcess(GetCurrentProcess(), 0);",
+      "ida_example": "TerminateProcess((HANDLE)0xFFFFFFFFFFFFFFFFLL, 0);"
+    },
+    "assembly_pattern": "많은 컴파일러가 GetCurrentProcess() 호출 자체를 인라인화해 mov ecx/rcx, 0FFFFFFFFh 처럼 상수 -1을 직접 넣는다 - IAT에 호출 흔적이 안 남을 수 있다.",
+    "pitfalls": [
+      "반환값은 진짜 커널 핸들이 아닌 pseudo handle이므로, DuplicateHandle 없이 다른 프로세스에 그대로 넘겨봐야 의미가 없다.",
+      "CloseHandle(GetCurrentProcess())을 호출해도 실제로 프로세스가 닫히지 않는다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "getpid() (단, Linux는 프로세스도 '핸들' 대신 pid_t를 씀)", "windows": "GetCurrentProcess" },
+    "related": ["win-getcurrentprocessid", "win-terminateprocess"],
+    "tags": ["pseudo handle", "-1", "self process", "GetCurrentProcess -1"],
+    "sources": [
+      { "title": "Microsoft Learn - GetCurrentProcess function", "url": "https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-getcurrentprocess" }
+    ]
+  },
+  {
+    "id": "win-getcurrentprocessid",
+    "type": "function",
+    "name": "GetCurrentProcessId",
+    "aliases": [],
+    "category": "process",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "processthreadsapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "DWORD GetCurrentProcessId(void);",
+    "summary": "현재 프로세스의 실제 PID(DWORD 정수)를 반환한다.",
+    "parameters": [],
+    "return_value": {
+      "success": "항상 성공, 호출 프로세스의 PID",
+      "failure": "해당 없음 (이 함수는 실패하지 않는다)",
+      "meaning": "GetCurrentProcess()가 반환하는 pseudo handle과 달리 실제 시스템 전역에서 유일한 정수 식별자다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    printf(\"pid = %lu\\n\", GetCurrentProcessId());\n    return 0;\n}\n",
+    "example_output": "pid = 4821\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "프로세스 생성 시 커널이 할당한 고유 식별자(EPROCESS.UniqueProcessId)를 그대로 반환한다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "뮤텍스/이벤트/파일 이름에 자신의 PID를 섞어 다중 인스턴스를 구분하거나(예: 감염 마커), 로그/이벤트 필터링, 또는 OpenProcess(..., GetCurrentProcessId())처럼 자기 자신을 대상으로 다시 핸들을 여는 우회적 패턴에서 등장한다. 단독으로는 리버싱 중요도가 낮지만 뮤텍스 이름 생성 로직과 함께 보이면 단일 인스턴스 체크/샌드박스 인식 로직의 일부일 수 있다.",
+      "decompiler_pattern": "sprintf(name, \"Global\\\\Mutex_%lu\", GetCurrentProcessId());",
+      "ida_example": "sprintf(Buffer, \"Global\\\\Mutex_%u\", GetCurrentProcessId());"
+    },
+    "assembly_pattern": "call ds:GetCurrentProcessId. 반환값(eax)이 곧바로 sprintf/문자열 포맷 함수의 인자로 이어지는 패턴이 흔하다.",
+    "pitfalls": [
+      "PID는 프로세스 종료 후 재사용될 수 있으므로 장기적인 고유 식별자로 신뢰해서는 안 된다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "getpid()", "windows": "GetCurrentProcessId" },
+    "related": ["win-getcurrentprocess"],
+    "tags": ["PID", "getpid equivalent", "mutex naming", "single instance check"],
+    "sources": [
+      { "title": "Microsoft Learn - GetCurrentProcessId function", "url": "https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-getcurrentprocessid" }
+    ]
+  },
+  {
+    "id": "win-createthread",
+    "type": "function",
+    "name": "CreateThread",
+    "aliases": [],
+    "category": "thread",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "processthreadsapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "HANDLE CreateThread(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId);",
+    "summary": "호출한 프로세스 안에 새 스레드를 생성하여 지정한 시작 주소(lpStartAddress)의 코드를 실행시킨다.",
+    "parameters": [
+      { "name": "lpThreadAttributes", "type": "LPSECURITY_ATTRIBUTES", "desc": "보안/상속 속성, 보통 NULL", "direction": "in", "nullable": true },
+      { "name": "dwStackSize", "type": "SIZE_T", "desc": "스택 크기 (0이면 기본값 사용)", "direction": "in", "nullable": false },
+      { "name": "lpStartAddress", "type": "LPTHREAD_START_ROUTINE", "desc": "새 스레드가 실행을 시작할 함수(코드)의 주소 - 인젝션에서 셸코드가 위치한 메모리 주소가 그대로 들어간다.", "direction": "in", "nullable": false },
+      { "name": "lpParameter", "type": "LPVOID", "desc": "시작 함수에 전달할 단일 인자", "direction": "in", "nullable": true },
+      { "name": "dwCreationFlags", "type": "DWORD", "desc": "0(즉시 실행) 또는 CREATE_SUSPENDED", "direction": "in", "nullable": false },
+      { "name": "lpThreadId", "type": "LPDWORD", "desc": "생성된 스레드의 ID가 채워질 출력 버퍼, NULL 가능(Windows XP 이상)", "direction": "out", "nullable": true }
+    ],
+    "return_value": {
+      "success": "새 스레드의 핸들 (0이 아님)",
+      "failure": "NULL",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "CREATE_SUSPENDED", "decimal": 4, "hex": "0x00000004", "desc": "정지 상태로 스레드를 생성 (ResumeThread로 실행 시작)" },
+      { "name": "STACK_SIZE_PARAM_IS_A_RESERVATION", "decimal": 65536, "hex": "0x00010000", "desc": "dwStackSize를 커밋이 아닌 예약 크기로 해석" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nstatic DWORD WINAPI ThreadProc(LPVOID param)\n{\n    printf(\"running in new thread, param=%d\\n\", (int)(INT_PTR)param);\n    return 0;\n}\n\nint main(void)\n{\n    HANDLE h = CreateThread(NULL, 0, ThreadProc, (LPVOID)42, 0, NULL);\n    if (h) {\n        WaitForSingleObject(h, INFINITE);\n        CloseHandle(h);\n    }\n    return 0;\n}\n",
+    "example_output": "running in new thread, param=42\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "새 스레드 커널 오브젝트와 사용자 모드 스택을 만들고, lpStartAddress를 시작 EIP/RIP로 하여 스케줄러 대기열에 넣는다 (또는 CREATE_SUSPENDED면 대기열에 넣지 않고 정지 상태로 유지). lpStartAddress는 함수 포인터일 뿐이며 실제 유효한 함수인지, 실행 가능한 메모리인지는 검사하지 않는다 - 이 때문에 임의의 메모리 주소를 실행시키는 셸코드 로더에 그대로 악용될 수 있다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "가장 전형적인 로컬 셸코드 실행 패턴의 마지막 단계다: win-virtualalloc으로 RWX(또는 나중에 win-virtualprotect로 실행 권한을 추가한) 메모리를 확보 -> memcpy 또는 WriteProcessMemory로 셸코드를 그 메모리에 기록 -> CreateThread(..., (LPTHREAD_START_ROUTINE)mem, ...)로 그 주소를 4번째 인자에 넘겨 새 스레드에서 실행. 디컴파일 코드에서 4번째 인자가 VirtualAlloc의 반환값(또는 그 반환값에 오프셋을 더한 주소)으로 캐스팅되어 들어가면 셸코드 실행으로 거의 확신할 수 있다. 원격 프로세스 인젝션에서는 동일한 원리의 CreateRemoteThread/QueueUserAPC가 쓰이지만 이 사전에는 로컬 버전만 수록되어 있다.",
+      "decompiler_pattern": "void *buf = VirtualAlloc(0, len, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);\nmemcpy(buf, shellcode, len);\nHANDLE t = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)buf, 0, 0, 0);\nWaitForSingleObject(t, INFINITE);",
+      "ida_example": "v1 = VirtualAlloc(0LL, dwSize, 0x3000u, 0x40u);\nmemcpy(v1, &Shellcode, dwSize);\nhThread = CreateThread(0LL, 0LL, (LPTHREAD_START_ROUTINE)v1, 0LL, 0LL, 0LL);\nWaitForSingleObject(hThread, 0xFFFFFFFF);"
+    },
+    "assembly_pattern": "call ds:CreateThread (IAT 경유). 3번째 인자(r8, x64 fastcall) 위치에 직전에 호출된 VirtualAlloc/HeapAlloc의 반환값(rax)이 그대로 이동(mov r8, rax)되어 들어가는 패턴을 찾으면 셸코드 실행 지점을 빠르게 특정할 수 있다.",
+    "pitfalls": [
+      "lpStartAddress는 타입 검사가 없으므로 함수 시그니처가 맞지 않는 임의의 주소를 넘겨도 컴파일/실행된다 - 크래시나 임의 코드 실행으로 이어질 수 있다.",
+      "반환된 스레드 핸들을 CloseHandle하지 않으면 핸들 누수가 생긴다 (스레드 자체가 종료되는 것과 핸들을 닫는 것은 별개).",
+      "dwStackSize=0이면 실행 파일의 기본 스택 크기(PE 헤더의 SizeOfStackReserve)를 사용한다."
+    ],
+    "security_notes": "VirtualAlloc(RWX) -> memcpy -> CreateThread 3단 콤보는 로컬 셸코드 로더의 가장 대표적인 시그니처로, 정적/동적 분석 도구가 흔히 탐지 규칙으로 사용한다.",
+    "equivalents": { "linux": "pthread_create(&tid, NULL, start_routine, arg)", "windows": "CreateThread" },
+    "related": ["win-virtualalloc", "win-openthread", "win-suspendthread", "win-resumethread", "win-waitforsingleobject", "win-openprocess"],
+    "tags": ["shellcode loader", "LPTHREAD_START_ROUTINE", "thread injection", "CreateRemoteThread 유사", "VirtualAlloc+CreateThread"],
+    "sources": [
+      { "title": "Microsoft Learn - CreateThread function", "url": "https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-createthread" }
+    ]
+  },
+  {
+    "id": "win-openthread",
+    "type": "function",
+    "name": "OpenThread",
+    "aliases": [],
+    "category": "thread",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "processthreadsapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "HANDLE OpenThread(DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwThreadId);",
+    "summary": "이미 존재하는 스레드에 대한 핸들을 연다. 스레드 하이재킹(context 조작)이나 suspend/resume 제어의 전제조건이다.",
+    "parameters": [
+      { "name": "dwDesiredAccess", "type": "DWORD", "desc": "요청할 접근 권한 (THREAD_* 상수의 OR 조합)", "direction": "in", "nullable": false },
+      { "name": "bInheritHandle", "type": "BOOL", "desc": "자식 프로세스가 이 핸들을 상속할지 여부", "direction": "in", "nullable": false },
+      { "name": "dwThreadId", "type": "DWORD", "desc": "대상 스레드의 ID", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "대상 스레드에 대한 핸들 (0이 아님)",
+      "failure": "NULL",
+      "meaning": "실패 시 GetLastError()로 원인을 확인한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "THREAD_TERMINATE", "decimal": 1, "hex": "0x0001", "desc": "TerminateThread 호출 권한" },
+      { "name": "THREAD_SUSPEND_RESUME", "decimal": 2, "hex": "0x0002", "desc": "SuspendThread/ResumeThread 호출 권한" },
+      { "name": "THREAD_GET_CONTEXT", "decimal": 8, "hex": "0x0008", "desc": "GetThreadContext 호출 권한 (레지스터 읽기)" },
+      { "name": "THREAD_SET_CONTEXT", "decimal": 16, "hex": "0x0010", "desc": "SetThreadContext 호출 권한 (레지스터/EIP 조작) - 스레드 하이재킹의 핵심 권한" },
+      { "name": "THREAD_QUERY_INFORMATION", "decimal": 64, "hex": "0x0040", "desc": "스레드 정보 조회 권한" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    DWORD tid = GetCurrentThreadId();\n    HANDLE h = OpenThread(THREAD_QUERY_INFORMATION, FALSE, tid);\n\n    if (h) {\n        printf(\"opened handle to tid %lu\\n\", tid);\n        CloseHandle(h);\n    }\n    return 0;\n}\n",
+    "example_output": "opened handle to tid 9101\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "커널 오브젝트 매니저에서 대상 스레드 오브젝트에 대한 참조를 얻는다. OpenProcess와 마찬가지로 요청한 접근 권한에 대한 보안 검사를 통과해야 한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "스레드 실행 하이재킹(Thread Execution Hijacking) 기법의 첫 단계다: OpenThread로 대상 스레드 핸들을 얻고 -> win-suspendthread로 정지 -> GetThreadContext/SetThreadContext로 EIP/RIP를 셸코드 주소로 바꾸고 -> win-resumethread로 재개. 이 기법은 새 스레드를 만들지 않고 이미 존재하는(정상적인) 스레드를 가로채기 때문에 CreateThread/CreateRemoteThread 기반 탐지를 우회하는 목적으로 자주 쓰인다.",
+      "decompiler_pattern": "HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_SET_CONTEXT, FALSE, tid);\nSuspendThread(hThread);\nGetThreadContext(hThread, &ctx);\nctx.Rip = (DWORD64)shellcode;\nSetThreadContext(hThread, &ctx);\nResumeThread(hThread);",
+      "ida_example": "hThread = OpenThread(0x1Fu, 0, dwThreadId);\nSuspendThread(hThread);"
+    },
+    "assembly_pattern": "call ds:OpenThread (IAT 경유). dwDesiredAccess에 THREAD_SET_CONTEXT(0x10)와 THREAD_SUSPEND_RESUME(0x2)이 함께 OR된 상수가 보이면 스레드 하이재킹 후보로 우선 검토한다.",
+    "pitfalls": [
+      "THREAD_SET_CONTEXT 권한 없이 얻은 핸들로는 SetThreadContext가 실패한다 - 필요한 권한을 미리 OR해서 요청해야 한다.",
+      "얻은 핸들은 사용 후 CloseHandle로 닫아야 한다."
+    ],
+    "security_notes": "THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_SET_CONTEXT 조합 요청은 스레드 하이재킹 시그니처로 자주 언급된다.",
+    "equivalents": { "linux": "직접 대응 없음 (ptrace로 유사한 레지스터 조작 가능)", "windows": "OpenThread" },
+    "related": ["win-suspendthread", "win-resumethread", "win-createthread"],
+    "tags": ["thread hijacking", "GetThreadContext", "SetThreadContext", "THREAD_SET_CONTEXT"],
+    "sources": [
+      { "title": "Microsoft Learn - OpenThread function", "url": "https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-openthread" },
+      { "title": "Microsoft Learn - Thread Security and Access Rights", "url": "https://learn.microsoft.com/windows/win32/procthread/thread-security-and-access-rights" }
+    ]
+  },
+  {
+    "id": "win-suspendthread",
+    "type": "function",
+    "name": "SuspendThread",
+    "aliases": [],
+    "category": "thread",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "processthreadsapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "DWORD SuspendThread(HANDLE hThread);",
+    "summary": "지정한 스레드의 실행을 일시 중단시킨다 (스레드의 suspend count를 1 증가시킴).",
+    "parameters": [
+      { "name": "hThread", "type": "HANDLE", "desc": "정지시킬 스레드의 핸들 (THREAD_SUSPEND_RESUME 권한 필요)", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "호출 이전의 suspend count (0 이상)",
+      "failure": "(DWORD)-1 (0xFFFFFFFF)",
+      "meaning": "반환값이 -1이면 실패이며 GetLastError()로 원인을 확인한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "SUSPEND_FAILED_RETURN", "decimal": 4294967295, "hex": "0xFFFFFFFF", "desc": "실패 시 반환값 (DWORD)-1" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nstatic volatile int g_run = 1;\n\nstatic DWORD WINAPI Worker(LPVOID p)\n{\n    while (g_run) Sleep(10);\n    return 0;\n}\n\nint main(void)\n{\n    HANDLE h = CreateThread(NULL, 0, Worker, NULL, 0, NULL);\n    Sleep(50);\n\n    DWORD prev = SuspendThread(h);\n    printf(\"suspended, previous count=%lu\\n\", prev);\n\n    ResumeThread(h);\n    g_run = 0;\n    WaitForSingleObject(h, INFINITE);\n    CloseHandle(h);\n    return 0;\n}\n",
+    "example_output": "suspended, previous count=0\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "스레드 오브젝트의 suspend count를 증가시켜 스케줄러가 해당 스레드에 CPU 시간을 배정하지 않도록 한다. count는 누적되므로 여러 번 SuspendThread를 호출하면 그만큼 ResumeThread도 여러 번(또는 count가 0이 될 때까지) 호출해야 실제로 재개된다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "스레드 실행 하이재킹의 핵심 단계 - win-openthread로 얻은 핸들을 정지시켜 컨텍스트(레지스터, 특히 EIP/RIP)를 안전하게 조작할 수 있는 창을 만든다. 또한 win-createprocessa/w의 CREATE_SUSPENDED로 만들어진 프로세스의 기본 스레드는 이미 suspended 상태이므로 SuspendThread를 별도로 호출할 필요가 없지만, 이미 실행 중이던 스레드를 뒤늦게 멈추고 싶을 때(예: 디버거처럼 동작하는 인젝터)는 SuspendThread를 직접 호출한다.",
+      "decompiler_pattern": "SuspendThread(hThread);\nGetThreadContext(hThread, &ctx);\n/* ctx.Rip 등을 셸코드 주소로 변경 */\nSetThreadContext(hThread, &ctx);\nResumeThread(hThread);",
+      "ida_example": "SuspendThread(hThread);\nContext.ContextFlags = 0x100010;\nGetThreadContext(hThread, &Context);"
+    },
+    "assembly_pattern": "call ds:SuspendThread. 반환값(eax)이 -1(0xFFFFFFFF)인지 비교하는 cmp eax, 0FFFFFFFFh 코드가 바로 뒤에 이어진다.",
+    "pitfalls": [
+      "suspend count는 누적된다 - 같은 스레드를 여러 번 정지시켰다면 같은 횟수만큼 ResumeThread를 호출해야 실제로 실행이 재개된다.",
+      "자기 자신의 현재 스레드를 SuspendThread로 정지시키면 그 스레드가 다시는 스스로를 깨울 수 없어 데드락이 된다."
+    ],
+    "security_notes": "SuspendThread 이후 GetThreadContext/SetThreadContext가 바로 이어지는 패턴은 스레드 하이재킹의 강한 지표다.",
+    "equivalents": { "linux": "직접 대응 없음 (POSIX 스레드에는 강제 suspend API가 없음, SIGSTOP은 프로세스 전체 단위)", "windows": "SuspendThread" },
+    "related": ["win-openthread", "win-resumethread"],
+    "tags": ["thread hijacking", "suspend count", "GetThreadContext", "context manipulation"],
+    "sources": [
+      { "title": "Microsoft Learn - SuspendThread function", "url": "https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-suspendthread" }
+    ]
+  },
+  {
+    "id": "win-resumethread",
+    "type": "function",
+    "name": "ResumeThread",
+    "aliases": [],
+    "category": "thread",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "processthreadsapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "DWORD ResumeThread(HANDLE hThread);",
+    "summary": "SuspendThread 또는 CREATE_SUSPENDED로 정지되어 있던 스레드의 suspend count를 1 감소시켜, count가 0이 되면 실행을 재개한다.",
+    "parameters": [
+      { "name": "hThread", "type": "HANDLE", "desc": "재개할 스레드의 핸들 (THREAD_SUSPEND_RESUME 권한 필요)", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "호출 이전의 suspend count (0 이상)",
+      "failure": "(DWORD)-1 (0xFFFFFFFF)",
+      "meaning": "반환값이 -1이면 실패이며 GetLastError()로 원인을 확인한다. 반환값이 0이었다면 이미 실행 중이었다는 의미이고, 1이었다면 이 호출로 실제로 실행이 재개된 것이다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "RESUME_FAILED_RETURN", "decimal": 4294967295, "hex": "0xFFFFFFFF", "desc": "실패 시 반환값 (DWORD)-1" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nint main(void)\n{\n    STARTUPINFOA si = { sizeof(si) };\n    PROCESS_INFORMATION pi;\n    char cmdline[] = \"notepad.exe\";\n\n    if (CreateProcessA(NULL, cmdline, NULL, NULL, FALSE,\n                        CREATE_SUSPENDED, NULL, NULL, &si, &pi)) {\n        printf(\"pid=%lu created suspended, resuming...\\n\", pi.dwProcessId);\n        ResumeThread(pi.hThread);\n        CloseHandle(pi.hThread);\n        CloseHandle(pi.hProcess);\n    }\n    return 0;\n}\n",
+    "example_output": "pid=5210 created suspended, resuming...\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "스레드 오브젝트의 suspend count를 감소시키고, 0에 도달하면 스케줄러 대기열에 다시 넣어 실행을 재개시킨다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "프로세스 인젝션/홀로잉 체인의 마지막 방아쇠(trigger) 역할을 한다: win-createprocessa/w(CREATE_SUSPENDED)로 정지된 프로세스를 만들고 -> VirtualAllocEx/WriteProcessMemory/SetThreadContext로 페이로드와 진입점을 조작한 뒤 -> ResumeThread를 호출하는 순간 실제로 악성 코드 실행이 시작된다. 마찬가지로 win-suspendthread로 하이재킹한 스레드의 컨텍스트를 바꾼 뒤에도 ResumeThread로 실행을 재개시켜야 실제 효과가 발생한다. 즉 디컴파일 코드에서 ResumeThread 호출 직전까지의 모든 준비 코드(메모리 할당, 쓰기, 컨텍스트 설정)가 곧 페이로드/공격 로직 그 자체다.",
+      "decompiler_pattern": "WriteProcessMemory(pi.hProcess, remoteAddr, payload, size, 0);\nSetThreadContext(pi.hThread, &ctx);\nResumeThread(pi.hThread); /* 이 시점부터 페이로드 실행 시작 */",
+      "ida_example": "SetThreadContext(ProcessInformation.hThread, &Context);\nResumeThread(ProcessInformation.hThread);"
+    },
+    "assembly_pattern": "call ds:ResumeThread (IAT 경유). 직전에 SetThreadContext 호출이 있었다면 하이재킹/홀로잉의 완결 지점이고, 직전에 CreateProcess(CREATE_SUSPENDED)만 있었다면 단순히 정상적으로 지연 실행하는 것일 수도 있으므로 전체 흐름을 함께 봐야 한다.",
+    "pitfalls": [
+      "suspend count가 1보다 크면 ResumeThread 한 번으로는 재개되지 않는다 (count가 0이 되어야 함).",
+      "이미 실행 중인(count=0) 스레드에 ResumeThread를 호출해도 에러는 아니며 그대로 0을 반환한다."
+    ],
+    "security_notes": "CreateProcess(CREATE_SUSPENDED) 이후 WriteProcessMemory/SetThreadContext를 거쳐 ResumeThread로 끝나는 시퀀스는 프로세스 홀로잉의 교과서적인 패턴이다.",
+    "equivalents": { "linux": "직접 대응 없음 (SIGCONT는 프로세스 전체 단위)", "windows": "ResumeThread" },
+    "related": ["win-createprocessa", "win-createprocessw", "win-suspendthread", "win-openthread", "win-createthread"],
+    "tags": ["process hollowing", "process injection", "thread hijacking", "CREATE_SUSPENDED trigger"],
+    "sources": [
+      { "title": "Microsoft Learn - ResumeThread function", "url": "https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-resumethread" }
+    ]
+  },
+  {
+    "id": "win-waitforsingleobject",
+    "type": "function",
+    "name": "WaitForSingleObject",
+    "aliases": [],
+    "category": "thread",
+    "platform": ["windows"],
+    "standard": "WinAPI",
+    "header": "synchapi.h (Windows.h)",
+    "library": "kernel32.dll",
+    "signature": "DWORD WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds);",
+    "summary": "지정한 커널 오브젝트(프로세스/스레드/뮤텍스/이벤트 등)가 signaled 상태가 되거나 지정한 시간이 지날 때까지 호출 스레드를 대기시킨다.",
+    "parameters": [
+      { "name": "hHandle", "type": "HANDLE", "desc": "대기할 대상 오브젝트의 핸들 (프로세스, 스레드, 뮤텍스, 이벤트 등)", "direction": "in", "nullable": false },
+      { "name": "dwMilliseconds", "type": "DWORD", "desc": "대기할 최대 시간(밀리초). INFINITE(0xFFFFFFFF)이면 무한 대기", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "WAIT_OBJECT_0, WAIT_ABANDONED, 또는 WAIT_TIMEOUT",
+      "failure": "WAIT_FAILED (0xFFFFFFFF)",
+      "meaning": "WAIT_FAILED인 경우에만 GetLastError()로 원인을 확인한다. WAIT_TIMEOUT은 실패가 아니라 시간 초과를 의미한다.",
+      "errno": false,
+      "get_last_error": true
+    },
+    "constants": [
+      { "name": "INFINITE", "decimal": 4294967295, "hex": "0xFFFFFFFF", "desc": "무한 대기 (타임아웃 없음) - 새로 만든/재개한 스레드나 프로세스가 끝날 때까지 기다릴 때 가장 흔히 쓰이는 값" },
+      { "name": "WAIT_OBJECT_0", "decimal": 0, "hex": "0x00000000", "desc": "오브젝트가 signaled 상태가 되어 대기가 정상적으로 끝남" },
+      { "name": "WAIT_ABANDONED", "decimal": 128, "hex": "0x00000080", "desc": "뮤텍스를 소유한 스레드가 해제하지 않고 종료됨 (abandoned mutex)" },
+      { "name": "WAIT_TIMEOUT", "decimal": 258, "hex": "0x00000102", "desc": "dwMilliseconds가 경과했지만 오브젝트가 signaled 상태가 되지 않음" },
+      { "name": "WAIT_FAILED", "decimal": 4294967295, "hex": "0xFFFFFFFF", "desc": "함수 호출 자체가 실패함 (반환값이며, INFINITE와 값은 같지만 하나는 입력 인자, 하나는 반환값이라 의미가 다름)" }
+    ],
+    "example_code": "#include <windows.h>\n#include <stdio.h>\n\nstatic DWORD WINAPI Worker(LPVOID p)\n{\n    Sleep(100);\n    return 7;\n}\n\nint main(void)\n{\n    HANDLE h = CreateThread(NULL, 0, Worker, NULL, 0, NULL);\n\n    DWORD wr = WaitForSingleObject(h, INFINITE);\n    if (wr == WAIT_OBJECT_0) {\n        DWORD exitCode;\n        GetExitCodeThread(h, &exitCode);\n        printf(\"thread finished, exit code=%lu\\n\", exitCode);\n    }\n    CloseHandle(h);\n    return 0;\n}\n",
+    "example_output": "thread finished, exit code=7\n",
+    "compile_cmd": "x86_64-w64-mingw32-gcc example.c -o example.exe",
+    "internals": "호출 스레드를 커널의 대기 큐에 등록하고, 대상 오브젝트의 signal 상태를 디스패처(dispatcher)가 감시하다가 상태가 바뀌면 스레드를 깨운다. 프로세스/스레드 핸들은 해당 프로세스/스레드가 종료되면 signaled 상태가 되고, 뮤텍스는 소유자가 없을 때, 이벤트는 SetEvent가 호출될 때 signaled 상태가 된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "인젝션/로더 코드가 win-createthread로 만든(또는 win-resumethread로 재개한) 스레드나 프로세스가 끝날 때까지 기다리는 동기화 지점으로 흔히 등장한다(WaitForSingleObject(hThread, INFINITE)). 또 다른 흔한 리버싱 포인트는 뮤텍스를 이용한 '이미 실행 중' 검사다: CreateMutex 후 WaitForSingleObject(hMutex, 0)의 결과가 WAIT_TIMEOUT이면 이미 다른 인스턴스가 실행 중이라 판단해 종료하는 패턴으로, 단일 인스턴스 체크 겸 일부 샌드박스/분석 환경 우회 로직에 사용되기도 한다.",
+      "decompiler_pattern": "HANDLE hThread = CreateThread(0, 0, StartRoutine, buf, 0, 0);\nWaitForSingleObject(hThread, 0xFFFFFFFF /* INFINITE */);",
+      "ida_example": "WaitForSingleObject(hObject, 0xFFFFFFFF);\nif ( !WaitForSingleObject(hMutex, 0) )\n  ExitProcess(0);"
+    },
+    "assembly_pattern": "call ds:WaitForSingleObject. 두 번째 인자로 상수 0xFFFFFFFF(-1, INFINITE)가 그대로 보이면 무한 대기이며, 셸코드/원격 스레드 실행 직후에 자주 뒤따른다.",
+    "pitfalls": [
+      "INFINITE로 대기 중인 오브젝트가 절대 signaled 상태가 되지 않으면 호출 스레드가 영구적으로 멈춘다(hang).",
+      "WAIT_TIMEOUT은 함수 실패가 아니라 정상적인 시간 초과이므로 GetLastError()로 판단하면 안 된다.",
+      "WAIT_FAILED와 INFINITE는 둘 다 0xFFFFFFFF라는 같은 비트 패턴이지만 하나는 입력, 하나는 반환값이라 혼동하면 안 된다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "pthread_join(tid, NULL) (스레드) / waitpid(pid, NULL, 0) (프로세스) / sem_wait, pthread_mutex_lock 등 (동기화 오브젝트)", "windows": "WaitForSingleObject" },
+    "related": ["win-createthread", "win-resumethread"],
+    "tags": ["INFINITE", "0xFFFFFFFF", "thread sync", "mutex check", "single instance check", "WAIT_TIMEOUT"],
+    "sources": [
+      { "title": "Microsoft Learn - WaitForSingleObject function", "url": "https://learn.microsoft.com/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject" },
+      { "title": "Microsoft Learn - Wait Functions", "url": "https://learn.microsoft.com/windows/win32/sync/wait-functions" }
+    ]
+  }
+]
