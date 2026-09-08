@@ -1,0 +1,2004 @@
+[
+  {
+    "id": "posix-socket",
+    "type": "function",
+    "name": "socket",
+    "aliases": [
+      "socket(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "int socket(int domain, int type, int protocol);",
+    "summary": "통신에 사용할 새 소켓을 생성하고 파일 디스크립터를 반환한다. 네트워크 서버/클라이언트 코드의 첫 진입점.",
+    "parameters": [
+      {
+        "name": "domain",
+        "type": "int",
+        "desc": "주소 체계(AF_INET, AF_INET6, AF_UNIX 등)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "type",
+        "type": "int",
+        "desc": "소켓 종류. SOCK_STREAM(TCP), SOCK_DGRAM(UDP), SOCK_RAW 등. SOCK_NONBLOCK/SOCK_CLOEXEC 플래그를 OR로 추가 가능",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "protocol",
+        "type": "int",
+        "desc": "프로토콜 번호. 보통 0을 넘겨 domain/type 조합의 기본 프로토콜을 사용",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "새로 생성된 소켓의 파일 디스크립터 (0 이상의 정수, 보통 3 이상)",
+      "failure": "-1 (errno 설정)",
+      "meaning": "socket() 직후 반환값을 지역변수(fd, s, sockfd 등)에 저장하고 이후 bind/listen/accept에 그대로 전달하는 패턴이 전형적이다. 반환값 검사가 없다면 에러 처리가 생략된 취약한 코드일 수 있다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "AF_UNIX (AF_LOCAL)",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "유닉스 도메인 소켓 (로컬 IPC)"
+      },
+      {
+        "name": "AF_INET",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "IPv4 인터넷 주소 체계"
+      },
+      {
+        "name": "AF_INET6",
+        "decimal": 10,
+        "hex": "0xA",
+        "desc": "IPv6 인터넷 주소 체계"
+      },
+      {
+        "name": "SOCK_STREAM",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "연결 지향 스트림(TCP)"
+      },
+      {
+        "name": "SOCK_DGRAM",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "비연결형 데이터그램(UDP)"
+      },
+      {
+        "name": "SOCK_RAW",
+        "decimal": 3,
+        "hex": "0x3",
+        "desc": "raw 소켓 (패킷 스니핑/커스텀 프로토콜)"
+      },
+      {
+        "name": "IPPROTO_TCP",
+        "decimal": 6,
+        "hex": "0x6",
+        "desc": "TCP 프로토콜 번호"
+      },
+      {
+        "name": "IPPROTO_UDP",
+        "decimal": 17,
+        "hex": "0x11",
+        "desc": "UDP 프로토콜 번호"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    if (fd < 0) {\n        perror(\"socket\");\n        return 1;\n    }\n    printf(\"socket() created fd=%d (AF_INET=%d, SOCK_STREAM=%d)\\n\", fd, AF_INET, SOCK_STREAM);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "socket() created fd=3 (AF_INET=2, SOCK_STREAM=1)\n",
+    "compile_cmd": "gcc socket_example.c -o socket_example && ./socket_example",
+    "internals": "커널에 새 소켓 구조체(struct socket, struct sock)를 할당하고 프로세스의 파일 디스크립터 테이블에 등록한다. 이 시점에는 아직 로컬 주소가 바인딩되지 않은 unnamed socket 상태이며, bind() 없이 connect()만 호출하면 커널이 임시(ephemeral) 로컬 포트를 자동으로 할당한다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "원격 서비스(pwnable-over-network) 바이너리의 전형적인 서버 부트스트랩은 socket -> bind -> listen -> accept 순서로 4단계를 거친다. socket()은 그 1단계다. 디컴파일에서 socket(2, 1, 0) 처럼 리터럴 상수만 보이면 AF_INET/SOCK_STREAM으로 즉시 해석하고, 이어지는 bind/listen/accept 호출을 연속으로 추적해 서버의 리스닝 포트와 accept 이후 클라이언트 fd가 어디로 전달되는지(주로 dup2로 stdin/stdout/stderr에 연결됨)를 확인해야 한다. main 함수 초반에 이 4개 호출이 몰려 있으면 그 이후 로직이 곧 '네트워크로 들어온 입력을 처리하는 취약 코드'일 가능성이 높다.",
+      "decompiler_pattern": "fd = socket(2, 1, 0); // AF_INET, SOCK_STREAM, protocol=0\nif ( fd < 0 )\n  exit(1);",
+      "ida_example": "v3 = socket(2, 1, 0);\nif ( v3 < 0 )\n  exit(1);\n// v3 -> bind(v3, ...) -> listen(v3, ...) -> accept(v3, ...) 순서로 계속 추적"
+    },
+    "assembly_pattern": "x86-64 Linux에서 libc socket()은 결국 syscall 번호 41(__NR_socket)로 귀결된다. 정적 링크/직접 syscall 바이너리에서는 mov edi, 2 ; mov esi, 1 ; xor edx, edx ; mov eax, 41 ; syscall 형태로만 보일 수도 있다.",
+    "pitfalls": [
+      "반환값 -1 검사를 생략하면 이후 bind/listen에 -1이 fd로 전달되어 항상 실패하는데, 이 실패도 검사하지 않는 코드가 CTF 바이너리에 실제로 존재한다.",
+      "protocol 인자를 0이 아닌 값으로 하드코딩하면 특정 프로토콜을 강제하는 것이므로 의미를 놓치지 않아야 한다."
+    ],
+    "security_notes": "socket() 자체는 취약점이 아니지만, 반환된 fd 번호가 이후 다른 리소스(파일, 파이프)의 fd와 우연히 겹치는 fd 재사용/컨퓨전 버그의 시작점이 될 수 있다.",
+    "equivalents": {
+      "linux": "socket",
+      "windows": "socket (Winsock, WSASocket)"
+    },
+    "related": [
+      "posix-bind",
+      "posix-listen",
+      "posix-accept",
+      "posix-fork"
+    ],
+    "tags": [
+      "network",
+      "TCP server",
+      "UDP server",
+      "AF_INET",
+      "SOCK_STREAM",
+      "pwnable",
+      "remote service",
+      "socket bootstrap",
+      "server 4단계"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - socket(2)",
+        "url": "https://man7.org/linux/man-pages/man2/socket.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - socket",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/socket.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-bind",
+    "type": "function",
+    "name": "bind",
+    "aliases": [
+      "bind(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);",
+    "summary": "소켓에 로컬 주소(IP + 포트)를 할당한다. 서버가 특정 포트에서 대기하려면 반드시 필요한 단계.",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "socket()으로 생성한 파일 디스크립터",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "addr",
+        "type": "const struct sockaddr *",
+        "desc": "바인딩할 주소. AF_INET이면 struct sockaddr_in을 캐스팅해서 전달",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "addrlen",
+        "type": "socklen_t",
+        "desc": "addr 구조체의 크기 (sizeof(struct sockaddr_in) 등)",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정)",
+      "meaning": "실패의 흔한 원인은 EADDRINUSE(포트가 이미 사용 중, TIME_WAIT 등)이다. `if (!bind(...))` 형태가 성공 분기다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "AF_INET",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "sockaddr_in.sin_family에 들어가는 값"
+      },
+      {
+        "name": "INADDR_ANY",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "모든 로컬 인터페이스에서 접속을 수신 (0.0.0.0)"
+      },
+      {
+        "name": "INADDR_LOOPBACK",
+        "decimal": 2130706433,
+        "hex": "0x7F000001",
+        "desc": "127.0.0.1"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    struct sockaddr_in addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin_family = AF_INET;\n    addr.sin_port = htons(9001);\n    addr.sin_addr.s_addr = htonl(INADDR_ANY);\n\n    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {\n        perror(\"bind\");\n        return 1;\n    }\n    printf(\"bound to 0.0.0.0:9001\\n\");\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "bound to 0.0.0.0:9001\n",
+    "compile_cmd": "gcc bind_example.c -o bind_example && ./bind_example",
+    "internals": "커널이 addr 인자를 addrlen 크기만큼 파싱해 소켓과 연결한다. AF_INET이면 struct sockaddr_in*으로 재해석하며 sin_family(오프셋 0, 2바이트), sin_port(오프셋 2, 2바이트, 네트워크 바이트 순서), sin_addr(오프셋 4, 4바이트, 네트워크 바이트 순서) 레이아웃을 갖는다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "서버 부트스트랩 4단계(socket -> bind -> listen -> accept) 중 2단계. 디컴파일에서 bind 호출 직전에 스택에 struct sockaddr_in 크기(보통 16바이트)의 구조체를 만들고 memset으로 0으로 밀고 htons()로 포트를 채우는 코드가 보이면, 그 구조체의 오프셋 +2가 포트, 오프셋 +4가 IP임을 바로 알 수 있다. 포트 상수가 예를 들어 0x901F처럼 리틀엔디안으로 뒤집혀 보이면 이는 htons(8080)의 결과이므로 실제 리스닝 포트를 즉시 계산할 수 있다.",
+      "decompiler_pattern": "memset(&addr, 0, 16);\naddr.sin_family = 2;\naddr.sin_port = htons(9001); // 상수 0x2923 -> 9001\naddr.sin_addr.s_addr = 0; // INADDR_ANY\nbind(fd, (struct sockaddr *)&addr, 16);",
+      "ida_example": "*(_WORD *)&addr = 2; // sin_family = AF_INET\n*((_WORD *)&addr + 1) = htons(9001); // sin_port\n*((_DWORD *)&addr + 1) = 0; // sin_addr = INADDR_ANY\nbind(fd, &addr, 16);"
+    },
+    "assembly_pattern": "struct sockaddr_in을 스택에 올리는 코드는 보통 여러 개의 mov word/dword ptr [rbp-X], imm 명령으로 나타나며, addrlen 인자로 16(0x10)이 자주 보인다.",
+    "pitfalls": [
+      "addrlen을 sizeof(struct sockaddr_in)이 아니라 잘못된 크기로 넘기면 EINVAL이 발생한다.",
+      "sin_family를 설정하지 않고 memset(0)만 한 채로 bind하면 AF_UNSPEC(0)으로 해석되어 실패할 수 있다.",
+      "포트 번호를 htons()로 변환하지 않고 그대로 넣는 실수는 엉뚱한 포트에 바인딩되는 버그를 만든다."
+    ],
+    "security_notes": "0.0.0.0(INADDR_ANY)에 바인딩하면 모든 네트워크 인터페이스에서 접속을 받으므로, 내부 전용으로 의도한 서비스가 실수로 외부에 노출되는 설정 오류의 원인이 될 수 있다.",
+    "equivalents": {
+      "linux": "bind",
+      "windows": "bind (Winsock)"
+    },
+    "related": [
+      "posix-socket",
+      "posix-listen",
+      "posix-accept",
+      "c-memset"
+    ],
+    "tags": [
+      "network",
+      "TCP server",
+      "sockaddr_in",
+      "포트 바인딩",
+      "서버 4단계",
+      "EADDRINUSE"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - bind(2)",
+        "url": "https://man7.org/linux/man-pages/man2/bind.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - bind",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/bind.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-listen",
+    "type": "function",
+    "name": "listen",
+    "aliases": [
+      "listen(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "int listen(int sockfd, int backlog);",
+    "summary": "바인딩된 소켓을 수동 대기(passive/listening) 상태로 전환하고 연결 대기열(backlog)을 생성한다.",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "bind()가 완료된 TCP(SOCK_STREAM) 소켓 fd",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "backlog",
+        "type": "int",
+        "desc": "커널이 accept()를 기다리며 큐에 쌓아둘 수 있는 최대 대기 연결 수",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정)",
+      "meaning": "listen 실패는 sockfd가 SOCK_STREAM이 아니거나 이미 connect된 소켓일 때 발생한다(EOPNOTSUPP/EINVAL).",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "SOMAXCONN",
+        "decimal": 128,
+        "hex": "0x80",
+        "desc": "전통적인 backlog 상한값 (배포판/커널 설정에 따라 실제 상한은 다를 수 있음, 최근 커널은 4096)"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    struct sockaddr_in addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin_family = AF_INET;\n    addr.sin_port = htons(9001);\n    addr.sin_addr.s_addr = htonl(INADDR_ANY);\n    bind(fd, (struct sockaddr *)&addr, sizeof(addr));\n\n    if (listen(fd, 5) < 0) {\n        perror(\"listen\");\n        return 1;\n    }\n    printf(\"listening on 0.0.0.0:9001 (backlog=5)\\n\");\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "listening on 0.0.0.0:9001 (backlog=5)\n",
+    "compile_cmd": "gcc listen_example.c -o listen_example && ./listen_example",
+    "internals": "소켓의 상태를 CLOSED에서 LISTEN으로 바꾸고, 커널 내부에 SYN 큐(half-open)와 accept 큐(완료된 연결)를 backlog 크기 기준으로 준비한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "서버 부트스트랩 4단계 중 3단계. listen(fd, N)에서 N(backlog) 값 자체는 취약점과 직접 관련이 적지만, 이 호출이 있다는 것 자체가 '이 fd는 곧 accept로 이어지는 TCP 서버 소켓'이라는 강력한 신호다. CTF pwnable 서비스에서는 fork 기반 동시 처리 모델이 흔해 backlog가 1~10 정도의 작은 상수로 하드코딩된 경우가 많다.",
+      "decompiler_pattern": "if ( listen(fd, 5) < 0 )\n  exit(1);\n// 이 다음 줄이 accept() 호출일 가능성이 매우 높다",
+      "ida_example": "v4 = listen(v3, 5);\nif ( v4 < 0 )\n  exit(1);"
+    },
+    "assembly_pattern": "listen 직후 곧바로 accept 호출이 이어지는 코드 블록(때로는 while(1) 루프 안)이 어셈블리/디컴파일 양쪽에서 뚜렷하게 붙어 나타난다.",
+    "pitfalls": [
+      "listen()은 SOCK_STREAM(TCP)에만 의미가 있다. UDP(SOCK_DGRAM) 소켓에 listen을 호출하는 코드는 없거나 오류다.",
+      "backlog가 가득 차면 새 연결 시도는 커널 단계에서 거부/재전송되며, 이는 애플리케이션 로그만 봐서는 원인을 알기 어렵다."
+    ],
+    "security_notes": "낮은 backlog는 대량 연결 시 서비스 거부(DoS)에 취약해질 수 있으나, 이는 대개 챌린지 설계와 무관한 인프라적 요소다.",
+    "equivalents": {
+      "linux": "listen",
+      "windows": "listen (Winsock)"
+    },
+    "related": [
+      "posix-bind",
+      "posix-accept",
+      "posix-socket"
+    ],
+    "tags": [
+      "network",
+      "TCP server",
+      "backlog",
+      "SOMAXCONN",
+      "서버 4단계"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - listen(2)",
+        "url": "https://man7.org/linux/man-pages/man2/listen.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - listen",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/listen.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-accept",
+    "type": "function",
+    "name": "accept",
+    "aliases": [
+      "accept(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);",
+    "summary": "listen 중인 소켓의 연결 대기열에서 완료된 연결을 하나 꺼내 통신 전용 새 소켓 fd를 반환한다(기본은 블로킹).",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "listen()이 호출된 리스닝 소켓 fd",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "addr",
+        "type": "struct sockaddr *",
+        "desc": "접속한 클라이언트의 주소를 채워 받을 버퍼 (필요 없으면 NULL 가능)",
+        "direction": "out",
+        "nullable": true
+      },
+      {
+        "name": "addrlen",
+        "type": "socklen_t *",
+        "desc": "addr 버퍼 크기를 입력하고 실제 채워진 크기를 반환받는 in/out 파라미터",
+        "direction": "inout",
+        "nullable": true
+      }
+    ],
+    "return_value": {
+      "success": "새로운 통신용 소켓 파일 디스크립터 (원래 listening fd와는 다른 fd)",
+      "failure": "-1 (errno 설정, 예: EAGAIN/EWOULDBLOCK — non-blocking일 때 대기 연결 없음)",
+      "meaning": "accept가 반환한 fd가 실제 그 클라이언트와의 데이터 송수신에 쓰이는 fd다. listening fd는 계속 다음 accept를 위해 살아있다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    struct sockaddr_in addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin_family = AF_INET;\n    addr.sin_port = htons(9001);\n    addr.sin_addr.s_addr = htonl(INADDR_ANY);\n    bind(fd, (struct sockaddr *)&addr, sizeof(addr));\n    listen(fd, 5);\n\n    struct sockaddr_in cli;\n    socklen_t clilen = sizeof(cli);\n    int client_fd = accept(fd, (struct sockaddr *)&cli, &clilen);\n    if (client_fd < 0) {\n        perror(\"accept\");\n        return 1;\n    }\n    printf(\"client connected, fd=%d\\n\", client_fd);\n    close(client_fd);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "client connected, fd=4\n",
+    "compile_cmd": "gcc accept_example.c -o accept_example && ./accept_example",
+    "internals": "완료된 3-way handshake 연결을 accept 큐에서 dequeue하고, 그 연결 전용으로 새 소켓 구조체와 새 fd를 만들어 반환한다. addr/addrlen을 넘기면 클라이언트의 IP:포트를 채워준다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "서버 부트스트랩 4단계(socket -> bind -> listen -> accept)의 마지막 단계이자, CTF 원격 pwnable 분석에서 가장 중요한 분기점이다. accept()가 반환한 client_fd 값을 반드시 끝까지 추적하라: 전형적인 패턴은 dup2(client_fd, 0); dup2(client_fd, 1); dup2(client_fd, 2); close(client_fd); 로 표준입출력을 클라이언트 소켓에 연결한 뒤, 그 다음부터는 gets/scanf/read(0, ...) 같은 '평범한 로컬 입출력 함수'가 곧 네트워크 입출력이 된다. 이 리다이렉션을 놓치면 취약한 입력 지점을 로컬 stdin으로 착각하기 쉽다. fork() 서버라면 accept 직후 fork()해서 자식 프로세스가 dup2/처리를 담당하고 부모는 다시 accept 루프로 돌아가는 구조도 흔하다.",
+      "decompiler_pattern": "client_fd = accept(fd, 0, 0);\ndup2(client_fd, 0); // stdin\ndup2(client_fd, 1); // stdout\ndup2(client_fd, 2); // stderr\nclose(client_fd);\n// 이후 read()/gets()/scanf() 호출은 실제로는 소켓 통신이다",
+      "ida_example": "v5 = accept(v3, 0, 0);\nif ( v5 >= 0 )\n{\n  dup2(v5, 0);\n  dup2(v5, 1);\n  dup2(v5, 2);\n  close(v5);\n  vuln_func(); // 내부에서 read(0, buf, big_size) 처럼 보이지만 사실 원격 입력\n}"
+    },
+    "assembly_pattern": "accept 호출 직후 dup2가 인자 0, 1, 2로 세 번 연달아 호출되는 패턴(mov esi, 0/1/2)은 육안으로도 매우 식별하기 쉬운 시그니처다.",
+    "pitfalls": [
+      "accept()는 기본적으로 블로킹이다. non-blocking 소켓이거나 accept4(SOCK_NONBLOCK)을 쓴 경우 EAGAIN 처리 루프를 놓치면 로직을 잘못 이해하게 된다.",
+      "listening fd와 accept가 반환한 client fd를 혼동하면 안 된다 — 이후 send/recv/read/write는 대부분 client fd를 대상으로 한다."
+    ],
+    "security_notes": "accept 이후 dup2로 표준 입출력을 소켓에 연결하는 구조는 정상적인 서버 패턴이지만, 이후 실행되는 코드에 버퍼 오버플로우 등이 있으면 곧바로 '원격 코드 실행'으로 이어지므로 CTF에서 가장 먼저 확인해야 할 흐름이다.",
+    "equivalents": {
+      "linux": "accept / accept4",
+      "windows": "accept (Winsock)"
+    },
+    "related": [
+      "posix-listen",
+      "posix-dup2",
+      "posix-fork",
+      "posix-execve"
+    ],
+    "tags": [
+      "network",
+      "TCP server",
+      "dup2",
+      "stdin stdout stderr 리다이렉션",
+      "remote pwnable",
+      "서버 4단계",
+      "fd 추적"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - accept(2)",
+        "url": "https://man7.org/linux/man-pages/man2/accept.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - accept",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/accept.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-connect",
+    "type": "function",
+    "name": "connect",
+    "aliases": [
+      "connect(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen);",
+    "summary": "클라이언트 소켓을 지정한 원격 주소로 연결한다(TCP는 3-way handshake를 트리거, UDP는 기본 목적지만 지정).",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "socket()으로 생성한 파일 디스크립터",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "addr",
+        "type": "const struct sockaddr *",
+        "desc": "연결할 원격 주소(IP+포트)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "addrlen",
+        "type": "socklen_t",
+        "desc": "addr 구조체 크기",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정, 예: ECONNREFUSED, ETIMEDOUT. non-blocking이면 EINPROGRESS)",
+      "meaning": "성공하면 이후 send/recv/read/write로 그 원격지와 통신할 수 있다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "AF_INET",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "IPv4 주소 체계"
+      },
+      {
+        "name": "EINPROGRESS",
+        "decimal": 115,
+        "hex": "0x73",
+        "desc": "non-blocking connect가 아직 진행 중일 때의 errno (Linux x86)"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    struct sockaddr_in srv;\n    memset(&srv, 0, sizeof(srv));\n    srv.sin_family = AF_INET;\n    srv.sin_port = htons(9001);\n    inet_pton(AF_INET, \"127.0.0.1\", &srv.sin_addr);\n\n    if (connect(fd, (struct sockaddr *)&srv, sizeof(srv)) < 0) {\n        perror(\"connect\");\n        return 1;\n    }\n    printf(\"connected to 127.0.0.1:9001\\n\");\n    const char *msg = \"hello\\n\";\n    send(fd, msg, 6, 0);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "connected to 127.0.0.1:9001\n",
+    "compile_cmd": "gcc connect_example.c -o connect_example && ./connect_example",
+    "internals": "TCP의 경우 SYN을 보내 3-way handshake를 시작하고 완료될 때까지(블로킹 모드) 대기한다. UDP의 경우 실제 패킷 교환 없이 커널에 '기본 목적지'만 등록해 이후 send/recv를 목적지 지정 없이 쓸 수 있게 한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "리버스 커넥션(콜백) 셸코드/악성코드/드로퍼에서 connect()는 공격자 서버로 접속을 여는 첫 단계로 나타난다. connect() 성공 직후 dup2(fd,0); dup2(fd,1); dup2(fd,2); execve(\"/bin/sh\", ...) 로 이어지는 코드는 전형적인 'connect-back shell' 시그니처이며, bind-shell(accept 기반)과 반대 방향이다. 하드코딩된 IP(예: sin_addr.s_addr = 0x0100007F 같은 리틀엔디안 상수)와 포트(htons 결과)를 문자열로 복원하면 C2 서버 주소를 알아낼 수 있다.",
+      "decompiler_pattern": "srv.sin_addr.s_addr = 0x0100007F; // 127.0.0.1 (리틀엔디안 저장)\nsrv.sin_port = htons(4444);\nconnect(fd, (struct sockaddr *)&srv, 16);\ndup2(fd, 0); dup2(fd, 1); dup2(fd, 2);\nexecve(\"/bin/sh\", args, 0);",
+      "ida_example": "connect(s, &addr, 16);\ndup2(s, 0);\ndup2(s, 1);\ndup2(s, 2);\nexecve(\"/bin/sh\", 0, 0); // reverse shell 패턴"
+    },
+    "assembly_pattern": "sin_addr.s_addr에 들어가는 4바이트 즉시값은 메모리에 리틀엔디안으로 저장되므로, IDA에서 0x0100007F 같은 값을 보면 바이트 순서를 뒤집어 127.0.0.1로 읽어야 한다.",
+    "pitfalls": [
+      "non-blocking 소켓에서 connect()가 -1/EINPROGRESS를 반환하는 것은 실패가 아니라 '진행 중'이다. select/poll/getsockopt(SO_ERROR)로 완료를 확인해야 한다.",
+      "connect 실패를 무시하고 바로 send/recv를 호출하면 그 이후 호출들이 모두 실패하거나 SIGPIPE를 유발할 수 있다."
+    ],
+    "security_notes": "하드코딩된 IP:포트로의 connect + dup2 + execve 조합은 리버스 셸의 강한 시그니처이므로, 악성코드/셸코드 분석에서 우선적으로 문자열/상수 검색 대상이 된다.",
+    "equivalents": {
+      "linux": "connect",
+      "windows": "connect (Winsock, WSAConnect)"
+    },
+    "related": [
+      "posix-socket",
+      "c-memset",
+      "posix-write",
+      "posix-read"
+    ],
+    "tags": [
+      "network",
+      "TCP client",
+      "reverse shell",
+      "connect-back",
+      "non-blocking connect",
+      "EINPROGRESS"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - connect(2)",
+        "url": "https://man7.org/linux/man-pages/man2/connect.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - connect",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-send",
+    "type": "function",
+    "name": "send",
+    "aliases": [
+      "send(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "ssize_t send(int sockfd, const void *buf, size_t len, int flags);",
+    "summary": "연결된(connected) 소켓으로 데이터를 전송한다. write()와 비슷하지만 소켓 전용 flags 인자를 받는다.",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "connect() 되었거나 accept()로 얻은 소켓 fd",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "buf",
+        "type": "const void *",
+        "desc": "전송할 데이터 버퍼",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "len",
+        "type": "size_t",
+        "desc": "전송하고자 하는 바이트 수",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "flags",
+        "type": "int",
+        "desc": "MSG_NOSIGNAL, MSG_DONTWAIT 등 비트 플래그",
+        "direction": "in",
+        "nullable": false,
+        "notes": "비트 플래그 인자"
+      }
+    ],
+    "return_value": {
+      "success": "실제로 전송된 바이트 수 (0 이상, len보다 작을 수 있음)",
+      "failure": "-1 (errno 설정, 예: EPIPE — 상대가 이미 연결을 닫은 소켓에 쓴 경우)",
+      "meaning": "반환값은 '요청한 만큼 다 보냈다'는 보장이 아니다. 짧은 전송(short write)이 발생할 수 있으므로 반환값만큼만 보냈다고 가정하고 나머지를 루프로 재전송해야 완전한 전송이 보장된다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "MSG_NOSIGNAL",
+        "decimal": 16384,
+        "hex": "0x4000",
+        "desc": "연결이 끊긴 소켓에 써도 SIGPIPE를 발생시키지 않음 (Linux)"
+      },
+      {
+        "name": "MSG_DONTWAIT",
+        "decimal": 64,
+        "hex": "0x40",
+        "desc": "이 호출만 non-blocking으로 수행"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    struct sockaddr_in srv;\n    memset(&srv, 0, sizeof(srv));\n    srv.sin_family = AF_INET;\n    srv.sin_port = htons(9001);\n    inet_pton(AF_INET, \"127.0.0.1\", &srv.sin_addr);\n    connect(fd, (struct sockaddr *)&srv, sizeof(srv));\n\n    const char *msg = \"PING\\n\";\n    ssize_t n = send(fd, msg, strlen(msg), 0);\n    printf(\"send() returned %zd\\n\", n);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "send() returned 5\n",
+    "compile_cmd": "gcc send_example.c -o send_example && ./send_example",
+    "internals": "버퍼 데이터를 커널의 소켓 송신 큐(socket send buffer)에 복사한다. 즉시 네트워크로 나간다는 보장은 없으며, 커널 버퍼가 가득 차면 블로킹되거나(기본) EAGAIN을 반환한다(non-blocking).",
+    "reversing": {
+      "importance": "High",
+      "notes": "send 반환값을 검사하지 않고 항상 len만큼 다 보냈다고 가정하는 코드는 짧은 전송 시 데이터 유실/프로토콜 깨짐 버그의 원인이 된다. CTF에서 send(fd, leaked_ptr, 8, 0) 처럼 스택/힙 포인터를 그대로 네트워크로 흘려보내는 코드가 있으면 정보 유출(정보 릭) 취약점의 핵심 지점이다. buf 인자가 지역 스택 배열이고 len이 그 배열보다 큰 상수라면 그 자체가 스택 오버리드 스캔의 단서가 된다.",
+      "decompiler_pattern": "n = send(fd, &leak_buf, 0x10, 0);\n// leak_buf에 canary/포인터가 들어있다면 정보 유출",
+      "ida_example": "send(v3, buf, 0x100, 0); // buf 크기가 0x100보다 작다면 out-of-bounds read 후 유출"
+    },
+    "assembly_pattern": "syscall 레벨에서는 sendto(fd, buf, len, flags, NULL, 0)로 구현되는 경우가 많아(x86-64 __NR_sendto), 디스어셈블리에서 send 호출부가 실제로는 sendto의 PLT 스텁으로 보일 수도 있다.",
+    "pitfalls": [
+      "반환값이 len보다 작을 수 있음을 무시하고 '전부 전송됨'으로 가정하면 안 된다.",
+      "이미 상대가 닫은 소켓에 send하면 SIGPIPE로 프로세스가 죽을 수 있다 (MSG_NOSIGNAL이나 SIGPIPE 무시 설정이 없다면)."
+    ],
+    "security_notes": "스택/힙 데이터를 검증 없이 send()로 그대로 내보내는 코드는 정보 유출(leak) 취약점의 대표적인 형태다.",
+    "equivalents": {
+      "linux": "send / write",
+      "windows": "send (Winsock)"
+    },
+    "related": [
+      "posix-write",
+      "posix-socket"
+    ],
+    "tags": [
+      "network",
+      "short write",
+      "정보 유출",
+      "SIGPIPE",
+      "MSG_NOSIGNAL"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - send(2)",
+        "url": "https://man7.org/linux/man-pages/man2/send.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - send",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/send.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-recv",
+    "type": "function",
+    "name": "recv",
+    "aliases": [
+      "recv(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "ssize_t recv(int sockfd, void *buf, size_t len, int flags);",
+    "summary": "연결된 소켓에서 데이터를 수신한다. read()와 비슷하지만 소켓 전용 flags를 받는다.",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "connect() 되었거나 accept()로 얻은 소켓 fd",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "buf",
+        "type": "void *",
+        "desc": "수신 데이터를 저장할 버퍼",
+        "direction": "out",
+        "nullable": false
+      },
+      {
+        "name": "len",
+        "type": "size_t",
+        "desc": "buf의 크기(최대 수신 바이트 수)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "flags",
+        "type": "int",
+        "desc": "MSG_PEEK, MSG_WAITALL 등 비트 플래그",
+        "direction": "in",
+        "nullable": false,
+        "notes": "비트 플래그 인자"
+      }
+    ],
+    "return_value": {
+      "success": "실제로 수신한 바이트 수 (양수). 0이면 상대가 연결을 정상 종료(EOF)했음을 의미",
+      "failure": "-1 (errno 설정)",
+      "meaning": "recv는 요청한 len보다 적게 수신하고 반환할 수 있다(short read). 0 반환과 -1 반환을 구분하지 않으면 EOF를 에러로 오인할 수 있다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "MSG_PEEK",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "수신 큐에서 데이터를 제거하지 않고 미리보기만 함"
+      },
+      {
+        "name": "MSG_WAITALL",
+        "decimal": 256,
+        "hex": "0x100",
+        "desc": "요청한 len만큼 다 채워질 때까지 대기 (블로킹 모드에서)"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    struct sockaddr_in addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin_family = AF_INET;\n    addr.sin_port = htons(9001);\n    addr.sin_addr.s_addr = htonl(INADDR_ANY);\n    bind(fd, (struct sockaddr *)&addr, sizeof(addr));\n    listen(fd, 1);\n\n    int cfd = accept(fd, NULL, NULL);\n    char buf[64] = {0};\n    ssize_t n = recv(cfd, buf, sizeof(buf) - 1, 0);\n    printf(\"recv() returned %zd bytes: %s\", n, buf);\n    close(cfd);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "recv() returned 5 bytes: PING\n",
+    "compile_cmd": "gcc recv_example.c -o recv_example && ./recv_example",
+    "internals": "커널의 소켓 수신 큐에 이미 도착해 있는 데이터를 buf로 복사한다. 데이터가 없으면 (블로킹 모드) 도착할 때까지 대기하거나 (non-blocking) EAGAIN을 즉시 반환한다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "accept() 이후 클라이언트 입력을 받는 지점이므로 CTF 원격 pwnable에서 사실상 '메인 공격 표면'이다. recv()의 반환값(실제 수신 길이)을 검증하지 않고 그 길이를 그대로 memcpy/strcpy 크기로 사용하거나, 반대로 반환값을 무시한 채 buf를 고정 길이로 파싱하는 코드는 각각 다른 종류의 취약점(길이 조작, 미초기화 데이터 사용)으로 이어진다. len 인자가 buf(스택 배열)의 실제 크기보다 크게 하드코딩되어 있으면 그 자체로 스택 버퍼 오버플로우다 — recv는 stdin의 read()/gets()만큼이나 흔한 오버플로우 진입점이다.",
+      "decompiler_pattern": "char buf[64];\nn = recv(fd, buf, 0x100, 0); // buf(64) < len(0x100) -> 스택 오버플로우",
+      "ida_example": "n = recv(client_fd, buf, 256, 0); // buf가 sub_esp 상 64바이트뿐이라면 즉시 오버플로우 후보"
+    },
+    "assembly_pattern": "recv 호출 시 세 번째 인자(len)로 들어가는 즉시값을 buf가 할당된 스택 프레임 크기(rbp 기준 오프셋)와 비교하면 오버플로우 여부를 빠르게 가늠할 수 있다.",
+    "pitfalls": [
+      "반환값 0을 '데이터 없음'이 아니라 'EOF(상대가 연결 종료)'로 해석해야 한다.",
+      "요청한 len만큼 항상 다 채워진다고 가정하면 안 된다(short read). 프로토콜 파서는 누적 수신 루프가 필요하다.",
+      "recv 반환값(음수 포함)을 부호 없는 정수(size_t/unsigned)에 저장하면 이후 길이 비교 로직이 왜곡될 수 있다."
+    ],
+    "security_notes": "네트워크로부터 받은 길이/내용을 검증 없이 신뢰하는 recv 호출은 원격 버퍼 오버플로우, 정수 오버플로우, 포맷 스트링 등 원격 익스플로잇의 시작점으로 가장 먼저 의심해야 한다.",
+    "equivalents": {
+      "linux": "recv / read",
+      "windows": "recv (Winsock)"
+    },
+    "related": [
+      "posix-read",
+      "posix-socket"
+    ],
+    "tags": [
+      "network",
+      "remote pwnable",
+      "buffer overflow",
+      "short read",
+      "EOF",
+      "attack surface"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - recv(2)",
+        "url": "https://man7.org/linux/man-pages/man2/recv.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - recv",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/recv.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-sendto",
+    "type": "function",
+    "name": "sendto",
+    "aliases": [
+      "sendto(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "ssize_t sendto(int sockfd, const void *buf, size_t len, int flags, const struct sockaddr *dest_addr, socklen_t addrlen);",
+    "summary": "비연결형(주로 UDP) 소켓에서 목적지 주소를 매번 지정해 데이터를 전송한다.",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "소켓 fd (connect 없이도 사용 가능한 UDP 소켓이 전형적)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "buf",
+        "type": "const void *",
+        "desc": "전송할 데이터",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "len",
+        "type": "size_t",
+        "desc": "전송할 바이트 수",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "flags",
+        "type": "int",
+        "desc": "MSG_* 플래그",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "dest_addr",
+        "type": "const struct sockaddr *",
+        "desc": "목적지 주소. 연결된(connect된) 소켓이면 NULL 가능",
+        "direction": "in",
+        "nullable": true
+      },
+      {
+        "name": "addrlen",
+        "type": "socklen_t",
+        "desc": "dest_addr 구조체 크기",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "실제로 전송된 바이트 수",
+      "failure": "-1 (errno 설정)",
+      "meaning": "UDP는 데이터그램 단위 전송이므로 성공하면 보통 len 전체가 한 번에 전송된다(TCP의 send와 달리 부분 전송이 드묾).",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "SOCK_DGRAM",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "sendto가 주로 사용되는 UDP 소켓 타입"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_DGRAM, 0);\n    struct sockaddr_in dst;\n    memset(&dst, 0, sizeof(dst));\n    dst.sin_family = AF_INET;\n    dst.sin_port = htons(9002);\n    inet_pton(AF_INET, \"127.0.0.1\", &dst.sin_addr);\n\n    const char *msg = \"hello-udp\";\n    ssize_t n = sendto(fd, msg, strlen(msg), 0,\n                        (struct sockaddr *)&dst, sizeof(dst));\n    printf(\"sendto() returned %zd\\n\", n);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "sendto() returned 9\n",
+    "compile_cmd": "gcc sendto_example.c -o sendto_example && ./sendto_example",
+    "internals": "UDP의 경우 매 호출마다 독립적인 데이터그램을 만들어 즉시 IP 계층으로 넘긴다. 연결 상태를 유지하지 않으므로 매번 목적지를 지정해야 한다(또는 connect()로 기본 목적지를 미리 등록해두고 send() 사용 가능).",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "바이너리에서 connect()/accept() 없이 socket(AF_INET, SOCK_DGRAM, ...) 다음 곧바로 sendto/recvfrom 쌍만 반복되는 루프가 보이면 이는 UDP 서비스임을 즉시 알 수 있다. TCP 기반 pwnable과 달리 UDP는 세션 개념이 없어 매 패킷을 독립적으로 파싱하므로, 패킷 파서의 길이 필드 검증 누락이 특히 흔한 취약점 패턴이다.",
+      "decompiler_pattern": "while ( 1 )\n{\n  n = recvfrom(fd, buf, 0x400, 0, &cli, &clilen);\n  process(buf, n);\n  sendto(fd, reply, reply_len, 0, &cli, clilen);\n}",
+      "ida_example": "sendto(s, resp_buf, v_len, 0, &cliaddr, 16); // v_len이 recvfrom에서 파싱된 값이면 크기 조작 가능성 검토"
+    },
+    "assembly_pattern": "send()와 마찬가지로 syscall 레벨에서는 __NR_sendto로 귀결되며, send()는 사실 dest_addr=NULL, addrlen=0으로 sendto를 호출하는 것과 동일하다.",
+    "pitfalls": [
+      "UDP는 신뢰성이 없으므로 sendto 성공(반환값 > 0)이 상대방 수신을 보장하지 않는다.",
+      "connect()로 기본 목적지를 등록한 UDP 소켓에 dest_addr을 다시 넘기면 EISCONN이 발생할 수 있다."
+    ],
+    "security_notes": "UDP는 출발지 주소를 쉽게 위조(spoofing)할 수 있으므로, sendto의 목적지를 recvfrom으로 받은 발신자 주소를 그대로 사용하는 echo/반사(reflection) 서비스는 증폭 공격(DRDoS)에 악용될 수 있다.",
+    "equivalents": {
+      "linux": "sendto",
+      "windows": "sendto (Winsock)"
+    },
+    "related": [
+      "posix-write",
+      "posix-socket",
+      "c-memset"
+    ],
+    "tags": [
+      "network",
+      "UDP",
+      "datagram",
+      "reflection attack",
+      "패킷 파서"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - sendto(2)",
+        "url": "https://man7.org/linux/man-pages/man2/send.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - sendto",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/sendto.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-recvfrom",
+    "type": "function",
+    "name": "recvfrom",
+    "aliases": [
+      "recvfrom(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen);",
+    "summary": "비연결형(주로 UDP) 소켓에서 데이터를 수신하고, 보낸 사람의 주소를 함께 얻는다.",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "UDP 소켓 fd (TCP에서도 사용 가능하지만 보통 UDP에서 쓰임)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "buf",
+        "type": "void *",
+        "desc": "수신 데이터를 저장할 버퍼",
+        "direction": "out",
+        "nullable": false
+      },
+      {
+        "name": "len",
+        "type": "size_t",
+        "desc": "buf의 크기",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "flags",
+        "type": "int",
+        "desc": "MSG_* 플래그",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "src_addr",
+        "type": "struct sockaddr *",
+        "desc": "보낸 사람 주소를 채워 받을 버퍼 (필요 없으면 NULL)",
+        "direction": "out",
+        "nullable": true
+      },
+      {
+        "name": "addrlen",
+        "type": "socklen_t *",
+        "desc": "src_addr 버퍼 크기를 입력하고 실제 크기를 반환받는 in/out",
+        "direction": "inout",
+        "nullable": true
+      }
+    ],
+    "return_value": {
+      "success": "수신한 바이트 수 (UDP는 데이터그램 단위이므로 한 번에 하나의 완전한 패킷을 반환)",
+      "failure": "-1 (errno 설정)",
+      "meaning": "UDP에서 0 바이트 데이터그램도 정상적인 수신일 수 있어 TCP recv의 EOF(0)과 의미가 다르다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_DGRAM, 0);\n    struct sockaddr_in addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin_family = AF_INET;\n    addr.sin_port = htons(9002);\n    addr.sin_addr.s_addr = htonl(INADDR_ANY);\n    bind(fd, (struct sockaddr *)&addr, sizeof(addr));\n\n    char buf[64] = {0};\n    struct sockaddr_in cli;\n    socklen_t clilen = sizeof(cli);\n    ssize_t n = recvfrom(fd, buf, sizeof(buf) - 1, 0,\n                          (struct sockaddr *)&cli, &clilen);\n    printf(\"recvfrom() got %zd bytes from %s:%d\\n\",\n           n, inet_ntoa(cli.sin_addr), ntohs(cli.sin_port));\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "recvfrom() got 9 bytes from 127.0.0.1:51234\n",
+    "compile_cmd": "gcc recvfrom_example.c -o recvfrom_example && ./recvfrom_example",
+    "internals": "커널이 UDP 소켓의 수신 큐에서 데이터그램 하나를 통째로 꺼내 buf로 복사하고, 패킷 헤더에 있던 발신지 IP:포트를 src_addr에 채운다. 하나의 recvfrom 호출은 하나의 데이터그램 경계를 넘지 않는다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "addrlen을 sizeof(struct sockaddr_in)으로 미리 초기화하지 않고 recvfrom에 넘기는 코드는 버그다(입력 시 유효한 크기를 넣어야 함). src_addr로 받은 발신자 정보를 검증 없이 신뢰(예: 인증 우회, whitelist 체크를 IP만으로 수행)하는 로직이 있다면 UDP 스푸핑으로 우회 가능한지 검토해야 한다. buf/len 조합이 스택 배열보다 크면 recv와 마찬가지로 오버플로우 후보다.",
+      "decompiler_pattern": "socklen_t clen = sizeof(cli);\nn = recvfrom(fd, buf, 0x200, 0, &cli, &clen);\nif ( cli.sin_addr.s_addr == trusted_ip )\n  grant_access(); // IP만으로 신뢰 -> UDP 스푸핑 가능성",
+      "ida_example": "n = recvfrom(v3, buf, 512, 0, &from, &fromlen); // buf가 그보다 작다면 오버플로우"
+    },
+    "assembly_pattern": "recvfrom과 recv는 동일한 __NR_recvfrom syscall로 귀결되며(recv는 src_addr=NULL, addrlen=NULL), 디스어셈블리에서 인자 개수 차이로 구분 가능하다.",
+    "pitfalls": [
+      "addrlen 포인터가 가리키는 값을 호출 전에 올바른 버퍼 크기로 설정해야 한다.",
+      "UDP의 발신지 주소는 스푸핑이 가능하므로 인증/접근제어 근거로 단독 사용하면 위험하다."
+    ],
+    "security_notes": "recvfrom으로 얻은 출발지 주소만으로 신뢰를 부여하는 설계는 UDP 스푸핑에 취약할 수 있다. 또한 대칭적인 sendto와 결합해 반사 증폭 공격에 악용될 수 있다.",
+    "equivalents": {
+      "linux": "recvfrom",
+      "windows": "recvfrom (Winsock)"
+    },
+    "related": [
+      "posix-read",
+      "posix-socket",
+      "c-memset"
+    ],
+    "tags": [
+      "network",
+      "UDP",
+      "datagram",
+      "spoofing",
+      "패킷 파서"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - recvfrom(2)",
+        "url": "https://man7.org/linux/man-pages/man2/recv.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - recvfrom",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/recvfrom.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-setsockopt",
+    "type": "function",
+    "name": "setsockopt",
+    "aliases": [
+      "setsockopt(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);",
+    "summary": "소켓 옵션(타임아웃, 주소 재사용, 버퍼 크기 등)을 설정한다.",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "옵션을 설정할 소켓 fd",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "level",
+        "type": "int",
+        "desc": "옵션이 속한 계층. SOL_SOCKET, IPPROTO_TCP 등",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "optname",
+        "type": "int",
+        "desc": "옵션 이름. SO_REUSEADDR, SO_RCVTIMEO 등",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "optval",
+        "type": "const void *",
+        "desc": "설정할 값이 담긴 버퍼 (보통 int* 또는 struct timeval*)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "optlen",
+        "type": "socklen_t",
+        "desc": "optval 버퍼의 크기",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정)",
+      "meaning": "옵션 설정 실패는 대개 치명적이지 않아 반환값 체크가 생략된 코드가 많다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "SOL_SOCKET",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "소켓 레벨 옵션 계층 (Linux)"
+      },
+      {
+        "name": "SO_REUSEADDR",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "TIME_WAIT 상태의 포트를 즉시 재바인딩 허용 (Linux)"
+      },
+      {
+        "name": "SO_KEEPALIVE",
+        "decimal": 9,
+        "hex": "0x9",
+        "desc": "TCP keepalive 패킷 활성화 (Linux)"
+      },
+      {
+        "name": "SO_LINGER",
+        "decimal": 13,
+        "hex": "0xD",
+        "desc": "close() 시 잔여 데이터 처리 방식 제어 (Linux)"
+      },
+      {
+        "name": "SO_RCVTIMEO",
+        "decimal": 20,
+        "hex": "0x14",
+        "desc": "recv 계열 호출의 타임아웃 설정 (Linux)"
+      },
+      {
+        "name": "SO_REUSEPORT",
+        "decimal": 15,
+        "hex": "0xF",
+        "desc": "여러 소켓이 동일 포트를 공유하도록 허용 (Linux)"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    int one = 1;\n    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));\n\n    struct sockaddr_in addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin_family = AF_INET;\n    addr.sin_port = htons(9001);\n    addr.sin_addr.s_addr = htonl(INADDR_ANY);\n    bind(fd, (struct sockaddr *)&addr, sizeof(addr));\n    printf(\"SO_REUSEADDR set, bind ok\\n\");\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "SO_REUSEADDR set, bind ok\n",
+    "compile_cmd": "gcc setsockopt_example.c -o setsockopt_example && ./setsockopt_example",
+    "internals": "커널의 소켓 구조체 내부 필드(옵션 플래그, 타임아웃 값 등)를 optval이 가리키는 값으로 갱신한다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, 4) 패턴은 서버가 재시작될 때 '주소 이미 사용 중' 오류를 피하기 위한 매우 표준적인 부트스트랩 코드이며, 취약점 분석 시 그냥 건너뛰어도 되는 보일러플레이트임을 바로 알아채는 것이 시간 절약에 중요하다. 반대로 SO_RCVTIMEO/SO_SNDTIMEO를 설정하는 코드가 보이면 그 서비스는 타임아웃 기반 로직(레이스 컨디션, 타이밍 사이드채널, 슬로우 클라이언트 차단)을 갖는 챌린지일 가능성을 시사한다.",
+      "decompiler_pattern": "one = 1;\nsetsockopt(fd, 1, 2, &one, 4); // SOL_SOCKET, SO_REUSEADDR - 보일러플레이트, 스킵 가능",
+      "ida_example": "v1 = 1;\nsetsockopt(s, 1, 2, &v1, 4);\nbind(s, &addr, 16); // 흔한 서버 초기화 관용구"
+    },
+    "assembly_pattern": "optval로 스택 상의 1(dword)을 가리키는 lea 명령과 함께, level/optname 인자로 작은 정수 리터럴(1, 2, 9, 13, 20)이 반복적으로 나타난다.",
+    "pitfalls": [
+      "SO_REUSEADDR과 SO_REUSEPORT의 의미를 혼동하기 쉽다 (전자는 TIME_WAIT 재바인딩, 후자는 여러 소켓의 포트 공유).",
+      "optlen을 잘못된 크기로 넘기면 EINVAL이 발생하거나(过도한 최근 커널) 조용히 무시될 수 있다."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "setsockopt",
+      "windows": "setsockopt (Winsock)"
+    },
+    "related": [
+      "posix-socket",
+      "posix-bind"
+    ],
+    "tags": [
+      "network",
+      "SO_REUSEADDR",
+      "boilerplate",
+      "타임아웃 설정",
+      "서버 초기화"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - setsockopt(2)",
+        "url": "https://man7.org/linux/man-pages/man2/setsockopt.2.html"
+      },
+      {
+        "title": "Linux man-pages - socket(7)",
+        "url": "https://man7.org/linux/man-pages/man7/socket.7.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-getsockopt",
+    "type": "function",
+    "name": "getsockopt",
+    "aliases": [
+      "getsockopt(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen);",
+    "summary": "소켓 옵션의 현재 값을 조회한다. 소켓 상태 점검(특히 비동기 connect 완료 확인)에 자주 쓰인다.",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "조회할 소켓 fd",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "level",
+        "type": "int",
+        "desc": "옵션 계층. SOL_SOCKET 등",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "optname",
+        "type": "int",
+        "desc": "조회할 옵션. SO_ERROR, SO_RCVBUF 등",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "optval",
+        "type": "void *",
+        "desc": "조회 결과를 저장할 버퍼",
+        "direction": "out",
+        "nullable": false
+      },
+      {
+        "name": "optlen",
+        "type": "socklen_t *",
+        "desc": "optval 버퍼 크기를 입력하고 실제 크기를 반환받는 in/out",
+        "direction": "inout",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정)",
+      "meaning": "getsockopt 자체의 성공/실패와 optval로 읽어온 '소켓 내부 오류 코드'(SO_ERROR)는 서로 다른 값이므로 혼동하지 않아야 한다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "SOL_SOCKET",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "소켓 레벨 옵션 계층"
+      },
+      {
+        "name": "SO_ERROR",
+        "decimal": 4,
+        "hex": "0x4",
+        "desc": "소켓에 마지막으로 발생한 오류 코드를 읽고 초기화 (Linux)"
+      },
+      {
+        "name": "SO_RCVBUF",
+        "decimal": 8,
+        "hex": "0x8",
+        "desc": "수신 버퍼 크기 조회 (Linux)"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <errno.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    struct sockaddr_in srv;\n    memset(&srv, 0, sizeof(srv));\n    srv.sin_family = AF_INET;\n    srv.sin_port = htons(1); /* 보통 닫혀 있는 포트 */\n    inet_pton(AF_INET, \"127.0.0.1\", &srv.sin_addr);\n    connect(fd, (struct sockaddr *)&srv, sizeof(srv));\n\n    int err = 0;\n    socklen_t len = sizeof(err);\n    getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);\n    printf(\"SO_ERROR=%d (%s)\\n\", err, strerror(err));\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "SO_ERROR=111 (Connection refused)\n",
+    "compile_cmd": "gcc getsockopt_example.c -o getsockopt_example && ./getsockopt_example",
+    "internals": "커널이 관리하는 소켓 구조체 내부 필드 값을 optval로 복사해준다. SO_ERROR는 조회와 동시에 내부 값을 0으로 리셋하는 특수한 '읽고 지우기(read-and-clear)' 동작을 한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "getsockopt(fd, SOL_SOCKET, SO_ERROR, ...) 조합은 non-blocking connect()가 완료되었는지, 성공했는지를 확인하는 표준 관용구다. select/poll/epoll로 소켓이 쓰기 가능(writable) 상태가 된 직후 이 호출이 나오면 비동기 네트워크 클라이언트/봇/멀티플렉싱 서버 코드임을 알 수 있다.",
+      "decompiler_pattern": "socklen_t len = 4;\ngetsockopt(fd, 1, 4, &err, &len); // SOL_SOCKET, SO_ERROR\nif ( err == 0 )\n  connected = 1;",
+      "ida_example": "getsockopt(s, 1, 4, &v_err, &v_len);\nif ( !v_err )\n  goto connected_ok;"
+    },
+    "assembly_pattern": "optname 인자로 4(SO_ERROR)가 리터럴로 들어가는 패턴은 non-blocking connect 확인 코드의 지문(fingerprint) 역할을 한다.",
+    "pitfalls": [
+      "optlen을 미리 올바른 크기로 초기화하지 않으면 잘못된 값을 읽거나 EINVAL이 발생한다.",
+      "SO_ERROR는 조회 즉시 초기화되므로, 동일한 오류를 두 번 연속 getsockopt로 읽으면 두 번째는 0이 나온다."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "getsockopt",
+      "windows": "getsockopt (Winsock)"
+    },
+    "related": [
+      "posix-socket"
+    ],
+    "tags": [
+      "network",
+      "SO_ERROR",
+      "non-blocking connect",
+      "epoll",
+      "select"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - getsockopt(2)",
+        "url": "https://man7.org/linux/man-pages/man2/getsockopt.2.html"
+      },
+      {
+        "title": "Linux man-pages - socket(7)",
+        "url": "https://man7.org/linux/man-pages/man7/socket.7.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-shutdown",
+    "type": "function",
+    "name": "shutdown",
+    "aliases": [
+      "shutdown(2)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/socket.h",
+    "library": "libc",
+    "signature": "int shutdown(int sockfd, int how);",
+    "summary": "소켓의 송신/수신/양방향 통신을 부분적으로 종료한다. fd 자체는 닫지 않는다는 점에서 close()와 다르다.",
+    "parameters": [
+      {
+        "name": "sockfd",
+        "type": "int",
+        "desc": "종료할 소켓 fd",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "how",
+        "type": "int",
+        "desc": "SHUT_RD, SHUT_WR, SHUT_RDWR 중 하나",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정)",
+      "meaning": "shutdown이 성공해도 fd는 여전히 유효하며 close()를 별도로 호출해야 fd가 회수된다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "SHUT_RD",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "추가 수신 금지"
+      },
+      {
+        "name": "SHUT_WR",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "추가 송신 금지 (상대방에게 FIN 전송, half-close)"
+      },
+      {
+        "name": "SHUT_RDWR",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "송신과 수신 모두 금지"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    struct sockaddr_in addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin_family = AF_INET;\n    addr.sin_port = htons(9001);\n    addr.sin_addr.s_addr = htonl(INADDR_ANY);\n    bind(fd, (struct sockaddr *)&addr, sizeof(addr));\n    listen(fd, 1);\n\n    int cfd = accept(fd, NULL, NULL);\n    send(cfd, \"bye\\n\", 4, 0);\n    shutdown(cfd, SHUT_WR); /* 더 이상 보낼 데이터 없음을 알림 (half-close) */\n    printf(\"shutdown(SHUT_WR) done, cfd still open for reading\\n\");\n    close(cfd);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "shutdown(SHUT_WR) done, cfd still open for reading\n",
+    "compile_cmd": "gcc shutdown_example.c -o shutdown_example && ./shutdown_example",
+    "internals": "TCP에서 SHUT_WR은 FIN 패킷을 전송해 '나는 더 이상 보낼 데이터가 없다'는 것을 상대에게 알리는 half-close를 수행한다. fd 자체나 커널 리소스는 회수되지 않고, close()가 호출되어 참조 카운트가 0이 될 때 비로소 완전히 정리된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "shutdown과 close를 혼동하면 안 된다: shutdown(fd, SHUT_WR) 이후에도 같은 fd로 recv가 계속 나오는 코드는 정상이다(half-close 패턴). 서버가 응답을 다 보낸 뒤 shutdown(cfd, SHUT_WR)만 호출하고 close는 나중에(혹은 다른 함수에서) 하는 구조라면, '한 번의 요청-여러 응답, 마지막에 EOF 신호' 프로토콜을 구현한 것으로 해석해야 한다.",
+      "decompiler_pattern": "send(cfd, resp, resp_len, 0);\nshutdown(cfd, 1); // SHUT_WR: 이후에도 cfd로 recv는 가능\nclose(cfd);",
+      "ida_example": "shutdown(v_cfd, 1);\n// v_cfd에 대한 recv 호출이 이 뒤에도 남아있다면 half-close 패턴"
+    },
+    "assembly_pattern": "shutdown 호출의 두 번째 인자로 0/1/2 중 하나의 작은 즉시값만 나타나므로 how 값 해석이 쉽다.",
+    "pitfalls": [
+      "shutdown()은 fd를 회수하지 않는다 — close()를 빼먹으면 fd(리소스) 누수가 발생한다.",
+      "SHUT_RD와 SHUT_WR의 방향을 반대로 착각하기 쉽다 (RD=수신 금지, WR=송신 금지)."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "shutdown",
+      "windows": "shutdown (Winsock)"
+    },
+    "related": [
+      "posix-socket",
+      "posix-dup2"
+    ],
+    "tags": [
+      "network",
+      "half-close",
+      "SHUT_WR",
+      "FIN",
+      "fd 누수"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - shutdown(2)",
+        "url": "https://man7.org/linux/man-pages/man2/shutdown.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - shutdown",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/shutdown.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-inet_addr",
+    "type": "function",
+    "name": "inet_addr",
+    "aliases": [
+      "inet_addr(3)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "arpa/inet.h",
+    "library": "libc",
+    "signature": "in_addr_t inet_addr(const char *cp);",
+    "summary": "점 표기(dotted-decimal) IPv4 문자열을 네트워크 바이트 순서의 32비트 정수로 변환하는 구식(legacy) API.",
+    "parameters": [
+      {
+        "name": "cp",
+        "type": "const char *",
+        "desc": "\"192.168.0.1\" 형식의 IPv4 문자열",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "네트워크 바이트 순서로 변환된 32비트 IPv4 주소",
+      "failure": "INADDR_NONE (0xFFFFFFFF)",
+      "meaning": "치명적 결함: \"255.255.255.255\"라는 유효한 브로드캐스트 주소의 실제 값도 0xFFFFFFFF이므로, inet_addr만으로는 '파싱 실패'와 '255.255.255.255 입력'을 구분할 수 없다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "INADDR_NONE",
+        "decimal": 4294967295,
+        "hex": "0xFFFFFFFF",
+        "desc": "inet_addr 실패 반환값이자 255.255.255.255의 실제 값과 동일"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    in_addr_t a = inet_addr(\"127.0.0.1\");\n    printf(\"inet_addr(\\\"127.0.0.1\\\") = 0x%08X\\n\", a);\n\n    in_addr_t bad = inet_addr(\"not-an-ip\");\n    printf(\"inet_addr(\\\"not-an-ip\\\") = 0x%08X (INADDR_NONE)\\n\", bad);\n    return 0;\n}\n",
+    "example_output": "inet_addr(\"127.0.0.1\") = 0x0100007F\ninet_addr(\"not-an-ip\") = 0xFFFFFFFF (INADDR_NONE)\n",
+    "compile_cmd": "gcc inet_addr_example.c -o inet_addr_example && ./inet_addr_example",
+    "internals": "점으로 구분된 각 10진 문자열을 파싱해 1바이트씩 채운 뒤, 메모리 상에는 그대로(리틀엔디안 호스트에서는 결과적으로 네트워크 순서=빅엔디안이 되도록) 32비트 값을 구성한다. 즉 \"127.0.0.1\"은 메모리에서 바이트가 7F 00 00 01 순서가 아니라 이미 네트워크 바이트 순서인 7F 00 00 01(빅엔디안 그대로)로 저장되며, 이를 리틀엔디안 CPU에서 워드로 읽으면 0x0100007F로 보인다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "inet_addr은 오류 반환값(INADDR_NONE)과 유효한 255.255.255.255 값을 구분하지 못하는 구식 API이므로, 최근 코드는 inet_pton/inet_aton을 선호한다. CTF 바이너리에서 inet_addr이 보이면 상대적으로 오래된 스타일이거나 의도적으로 레거시 API를 재현한 챌린지일 수 있다. 문자열 리터럴로 하드코딩된 IP를 찾을 때 inet_addr(\"x.x.x.x\") 호출의 인자 문자열을 바로 읽으면 대상 서버 주소를 알 수 있다.",
+      "decompiler_pattern": "addr.sin_addr.s_addr = inet_addr(\"10.0.0.5\"); // 문자열 리터럴에서 대상 IP 바로 확인",
+      "ida_example": "v = inet_addr(\"10.0.0.5\");\nif ( v == 0xFFFFFFFF )\n  ; // 파싱 실패 처리 (BUT 10.0.0.5는 실패 안 함, 255.255.255.255과의 혼동 사례)"
+    },
+    "assembly_pattern": "문자열 상수(\"x.x.x.x\")를 rdi/edi로 넘기는 lea + call inet_addr 패턴은 IDA 문자열 창(Strings window)에서 IP 후보를 찾는 데 유용한 단서다.",
+    "pitfalls": [
+      "반환값이 INADDR_NONE인지 확인하는 것만으로는 \"255.255.255.255\" 입력과 파싱 오류를 구분할 수 없다.",
+      "IPv6를 지원하지 않는다 — IPv4 전용."
+    ],
+    "security_notes": "레거시 API의 모호한 오류 처리로 인해 입력 검증 로직이 실제로는 우회 가능한 경우가 있다 (예: 잘못된 IP 문자열이 조용히 255.255.255.255로 취급됨).",
+    "equivalents": {
+      "linux": "inet_addr / inet_aton / inet_pton",
+      "windows": "inet_addr (Winsock)"
+    },
+    "related": [
+      "posix-socket",
+      "c-memset"
+    ],
+    "tags": [
+      "network",
+      "IPv4",
+      "legacy API",
+      "INADDR_NONE",
+      "문자열 파싱"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - inet_addr(3)",
+        "url": "https://man7.org/linux/man-pages/man3/inet_addr.3.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-inet_pton",
+    "type": "function",
+    "name": "inet_pton",
+    "aliases": [
+      "inet_pton(3)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "arpa/inet.h",
+    "library": "libc",
+    "signature": "int inet_pton(int af, const char *src, void *dst);",
+    "summary": "문자열 형태의 IP 주소(IPv4 또는 IPv6)를 이진(binary) 네트워크 바이트 순서 형태로 변환하는 최신 API. inet_addr의 오류 판별 결함을 해결.",
+    "parameters": [
+      {
+        "name": "af",
+        "type": "int",
+        "desc": "AF_INET(IPv4) 또는 AF_INET6(IPv6)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "src",
+        "type": "const char *",
+        "desc": "변환할 IP 문자열",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "dst",
+        "type": "void *",
+        "desc": "결과를 저장할 버퍼 (struct in_addr* 또는 struct in6_addr*)",
+        "direction": "out",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "1",
+      "failure": "0 (src가 올바른 주소 형식이 아님) 또는 -1 (af가 지원되지 않는 값, errno=EAFNOSUPPORT)",
+      "meaning": "inet_addr과 달리 '형식 오류'와 '지원하지 않는 주소 체계'를 명확히 구분해 반환한다. 반환값이 1이 아니면 무조건 실패로 처리해야 한다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "AF_INET",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "IPv4"
+      },
+      {
+        "name": "AF_INET6",
+        "decimal": 10,
+        "hex": "0xA",
+        "desc": "IPv6"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    struct in_addr a;\n    int r = inet_pton(AF_INET, \"192.168.1.10\", &a);\n    printf(\"inet_pton returned %d, addr=0x%08X\\n\", r, a.s_addr);\n\n    int bad = inet_pton(AF_INET, \"not-an-ip\", &a);\n    printf(\"inet_pton(bad) returned %d\\n\", bad);\n    return 0;\n}\n",
+    "example_output": "inet_pton returned 1, addr=0x0A01A8C0\ninet_pton(bad) returned 0\n",
+    "compile_cmd": "gcc inet_pton_example.c -o inet_pton_example && ./inet_pton_example",
+    "internals": "af에 따라 IPv4는 4바이트, IPv6는 16바이트 바이너리 표현으로 dst를 채운다. inet_addr과 달리 dst가 이미 이진 데이터이므로 별도의 '오류 전용 예약값'이 필요 없다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "inet_pton(af, ...)의 af 인자만 봐도 그 코드가 IPv4 전용인지 듀얼스택(IPv6 지원)인지 즉시 판별할 수 있다. bind/connect 이전에 문자열 리터럴을 inet_pton으로 변환하는 코드가 있다면, 그 문자열이 서버/클라이언트가 접속하려는 실제 대상 주소다. 반환값 검사(== 1)가 누락된 코드는 잘못된 형식의 문자열이 들어와도 dst 버퍼의 이전 값(초기화 안 된 스택 데이터일 수 있음)을 그대로 사용하게 되는 버그가 될 수 있다.",
+      "decompiler_pattern": "if ( inet_pton(2, ip_str, &addr.sin_addr) != 1 )\n  exit(1); // AF_INET, 형식 검증",
+      "ida_example": "v = inet_pton(2, s, &addr4.sin_addr);\nif ( v != 1 )\n  goto invalid_ip;"
+    },
+    "assembly_pattern": "af 인자가 2(AF_INET)로 고정된 리터럴이면 IPv4 전용 코드, 10(AF_INET6)이면 IPv6 처리 분기임을 바로 알 수 있다.",
+    "pitfalls": [
+      "반환값이 1이 아니면(0 또는 -1) 무조건 실패로 취급해야 한다 — 0을 '성공했지만 값이 0'으로 착각하면 안 된다.",
+      "dst 버퍼가 af에 맞는 크기(IPv4=4바이트, IPv6=16바이트)보다 작으면 오버플로우가 발생한다."
+    ],
+    "security_notes": "inet_addr 대비 입력 검증이 명확해 신뢰할 수 있는 파싱 함수지만, 반환값 체크를 생략하면 여전히 미검증 데이터를 사용하는 문제가 남는다.",
+    "equivalents": {
+      "linux": "inet_pton",
+      "windows": "InetPton (Winsock)"
+    },
+    "related": [
+      "posix-socket",
+      "posix-bind"
+    ],
+    "tags": [
+      "network",
+      "IPv4",
+      "IPv6",
+      "주소 파싱",
+      "inet_addr 대체"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - inet_pton(3)",
+        "url": "https://man7.org/linux/man-pages/man3/inet_pton.3.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-inet_ntop",
+    "type": "function",
+    "name": "inet_ntop",
+    "aliases": [
+      "inet_ntop(3)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "arpa/inet.h",
+    "library": "libc",
+    "signature": "const char *inet_ntop(int af, const void *src, char *dst, socklen_t size);",
+    "summary": "이진 네트워크 바이트 순서 IP 주소를 사람이 읽을 수 있는 문자열로 변환한다. inet_pton의 역변환.",
+    "parameters": [
+      {
+        "name": "af",
+        "type": "int",
+        "desc": "AF_INET 또는 AF_INET6",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "src",
+        "type": "const void *",
+        "desc": "변환할 이진 주소 (struct in_addr* 또는 struct in6_addr*)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "dst",
+        "type": "char *",
+        "desc": "결과 문자열을 저장할 버퍼",
+        "direction": "out",
+        "nullable": false
+      },
+      {
+        "name": "size",
+        "type": "socklen_t",
+        "desc": "dst 버퍼 크기. INET_ADDRSTRLEN 또는 INET6_ADDRSTRLEN 이상이어야 함",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "dst와 동일한 포인터",
+      "failure": "NULL (errno 설정, 예: size가 너무 작으면 ENOSPC)",
+      "meaning": "반환값을 확인하지 않고 dst를 곧바로 사용하면, 실패 시 초기화되지 않았거나 잘린 문자열을 그대로 쓰게 될 수 있다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "INET_ADDRSTRLEN",
+        "decimal": 16,
+        "hex": "0x10",
+        "desc": "IPv4 문자열 최대 길이(널 종료 포함)"
+      },
+      {
+        "name": "INET6_ADDRSTRLEN",
+        "decimal": 46,
+        "hex": "0x2E",
+        "desc": "IPv6 문자열 최대 길이(널 종료 포함)"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    struct in_addr a;\n    inet_pton(AF_INET, \"8.8.8.8\", &a);\n\n    char buf[INET_ADDRSTRLEN];\n    const char *s = inet_ntop(AF_INET, &a, buf, sizeof(buf));\n    printf(\"inet_ntop -> %s\\n\", s);\n    return 0;\n}\n",
+    "example_output": "inet_ntop -> 8.8.8.8\n",
+    "compile_cmd": "gcc inet_ntop_example.c -o inet_ntop_example && ./inet_ntop_example",
+    "internals": "src의 각 바이트를 af에 맞는 형식(IPv4는 점 표기 4개 10진수, IPv6는 콜론으로 구분된 16진수 그룹)의 문자열로 dst에 memcpy/포맷팅한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "accept()로 받은 클라이언트 주소를 로그에 남기거나 화면에 출력하는 코드에서 흔히 발견되며(접속 로그, 관리자 패널), 로그 파싱/조작 챌린지의 단서가 되는 경우가 있다. dst 버퍼 크기(size)가 INET6_ADDRSTRLEN(46)보다 작은 상태에서 AF_INET6 주소를 변환하면 실패하거나(정상 구현이면 ENOSPC) size 체크가 없는 재구현이라면 오버플로우로 이어질 수 있다.",
+      "decompiler_pattern": "char ipstr[16];\ninet_ntop(2, &cli.sin_addr, ipstr, 16); // AF_INET, INET_ADDRSTRLEN\nprintf(\"connection from %s\\n\", ipstr);",
+      "ida_example": "inet_ntop(2, &from.sin_addr, buf, 16);\nlog_connection(buf); // 접속 로그 기록 지점"
+    },
+    "assembly_pattern": "size 인자로 16 또는 46 리터럴이 나타나면 각각 IPv4/IPv6 버퍼임을 즉시 알 수 있다.",
+    "pitfalls": [
+      "IPv6까지 다루는 코드에서 버퍼를 INET_ADDRSTRLEN(16)으로만 잡으면 부족하다 — INET6_ADDRSTRLEN(46)을 써야 한다.",
+      "반환값 NULL 체크를 생략하면 실패 시 dst의 내용이 불확실한 상태로 사용될 수 있다."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "inet_ntop",
+      "windows": "InetNtop (Winsock)"
+    },
+    "related": [
+      "posix-socket",
+      "c-memcpy"
+    ],
+    "tags": [
+      "network",
+      "IPv4",
+      "IPv6",
+      "접속 로그",
+      "주소 문자열화"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - inet_ntop(3)",
+        "url": "https://man7.org/linux/man-pages/man3/inet_ntop.3.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-htons",
+    "type": "function",
+    "name": "htons",
+    "aliases": [
+      "htons(3)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "arpa/inet.h",
+    "library": "libc",
+    "signature": "uint16_t htons(uint16_t hostshort);",
+    "summary": "16비트 정수를 호스트 바이트 순서에서 네트워크 바이트 순서(빅엔디안)로 변환한다. 주로 포트 번호 설정에 사용.",
+    "parameters": [
+      {
+        "name": "hostshort",
+        "type": "uint16_t",
+        "desc": "호스트 바이트 순서의 16비트 값(예: 포트 번호)",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "네트워크 바이트 순서(빅엔디안)로 변환된 16비트 값. 실패 개념이 없다.",
+      "failure": "N/A",
+      "meaning": "x86/x86-64(리틀엔디안) 환경에서 실제로 상위/하위 바이트를 맞바꾸는 스왑 연산이다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "htons(80)",
+        "decimal": 20480,
+        "hex": "0x5000",
+        "desc": "포트 80을 네트워크 바이트 순서로 표현한 값 (원래 0x0050)"
+      },
+      {
+        "name": "htons(8080)",
+        "decimal": 36895,
+        "hex": "0x901F",
+        "desc": "포트 8080(0x1F90)을 네트워크 바이트 순서로 표현한 값"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    uint16_t port = 8080;\n    uint16_t net = htons(port);\n    printf(\"host order: 0x%04X, network order: 0x%04X\\n\", port, net);\n    return 0;\n}\n",
+    "example_output": "host order: 0x1F90, network order: 0x901F\n",
+    "compile_cmd": "gcc htons_example.c -o htons_example && ./htons_example",
+    "internals": "네트워크 프로토콜(IP/TCP/UDP 헤더)은 항상 빅엔디안(네트워크 바이트 순서)을 사용하도록 표준화되어 있다. x86/x86-64 같은 리틀엔디안 CPU에서는 호스트가 사용하는 바이트 순서와 정반대이므로, 상위 바이트와 하위 바이트를 교환(swap)하는 연산이 실제 동작이다. 빅엔디안 CPU(예: 일부 임베디드/네트워크 장비)에서는 이미 순서가 같으므로 htons가 사실상 아무 일도 하지 않는 no-op으로 컴파일된다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "포트 번호가 디컴파일 코드나 메모리 덤프에서 예상과 다르게 뒤집혀 보이는(예: 8080을 의도했는데 0x901F, 또는 리틀엔디안 메모리에 90 1F로 저장) 현상은 거의 항상 htons() 때문이다. sockaddr_in.sin_port 필드에 들어가는 리터럴을 볼 때는 항상 '이미 네트워크 바이트 순서'라고 가정하고, 상위/하위 바이트를 바꿔 읽어야 실제 포트 번호가 나온다. 최적화된 빌드에서는 htons() 호출 자체가 인라인화되어 함수 호출 없이 xchg/rol 명령 한 줄로만 나타나는 경우가 매우 흔하다.",
+      "decompiler_pattern": "addr.sin_port = htons(9001); // 상수처럼 보이면 실제로는 컴파일 타임에 이미 스왑된 값(0x2923)일 수 있음",
+      "ida_example": "*(_WORD *)((char *)&addr + 2) = 0x2923; // htons(9001)이 컴파일러에 의해 상수로 미리 계산된 흔적"
+    },
+    "assembly_pattern": "mov ax, 0x1F90 다음에 xchg al, ah 또는 rol ax, 8 한 줄로 인라인화되는 경우가 매우 흔하다. 실제 함수 호출(call htons)이 보이는 것은 최적화가 꺼진 디버그 빌드에서 더 흔하다.",
+    "pitfalls": [
+      "htons를 빼먹고 포트 값을 그대로 sin_port에 넣으면, 리틀엔디안 CPU에서는 완전히 다른(뒤집힌) 포트에 바인딩/연결된다.",
+      "메모리 덤프에서 포트 값을 읽을 때 엔디안을 고려하지 않으면 실제 포트 번호를 오독한다."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "htons",
+      "windows": "htons (Winsock)"
+    },
+    "related": [
+      "posix-socket",
+      "posix-bind"
+    ],
+    "tags": [
+      "network",
+      "byte order",
+      "endianness",
+      "big-endian",
+      "포트 번호",
+      "바이트 스왑"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - htons(3)",
+        "url": "https://man7.org/linux/man-pages/man3/htons.3.html"
+      },
+      {
+        "title": "Linux man-pages - byteorder(3)",
+        "url": "https://man7.org/linux/man-pages/man3/byteorder.3.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-htonl",
+    "type": "function",
+    "name": "htonl",
+    "aliases": [
+      "htonl(3)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "arpa/inet.h",
+    "library": "libc",
+    "signature": "uint32_t htonl(uint32_t hostlong);",
+    "summary": "32비트 정수를 호스트 바이트 순서에서 네트워크 바이트 순서(빅엔디안)로 변환한다. 주로 IPv4 주소 설정에 사용.",
+    "parameters": [
+      {
+        "name": "hostlong",
+        "type": "uint32_t",
+        "desc": "호스트 바이트 순서의 32비트 값(예: IPv4 주소, INADDR_ANY)",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "네트워크 바이트 순서(빅엔디안)로 변환된 32비트 값. 실패 개념이 없다.",
+      "failure": "N/A",
+      "meaning": "x86/x86-64에서는 4바이트 전체를 완전히 뒤집는 스왑 연산이다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "htonl(INADDR_ANY)",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "0은 뒤집어도 0이라 변화가 없음"
+      },
+      {
+        "name": "htonl(0x7F000001) /* 127.0.0.1 */",
+        "decimal": 16777343,
+        "hex": "0x100007F",
+        "desc": "127.0.0.1을 네트워크 바이트 순서로 저장한 값"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    uint32_t host_ip = 0x7F000001; /* 127.0.0.1 */\n    uint32_t net_ip = htonl(host_ip);\n    printf(\"host order: 0x%08X, network order: 0x%08X\\n\", host_ip, net_ip);\n    return 0;\n}\n",
+    "example_output": "host order: 0x7F000001, network order: 0x0100007F\n",
+    "compile_cmd": "gcc htonl_example.c -o htonl_example && ./htonl_example",
+    "internals": "x86-64에서는 bswap 명령(또는 인라인화된 회전/스왑 시퀀스) 하나로 32비트 값의 4바이트 순서를 완전히 뒤집는다. htons가 2바이트 스왑이라면 htonl은 4바이트 스왑이다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "IPv4 주소 상수가 소스에서는 127.0.0.1처럼 보이지만 메모리/디컴파일 상수로는 0x0100007F로 나타나는 이유가 바로 htonl(또는 inet_addr/inet_pton의 결과)이다. bind()의 INADDR_ANY(0)는 htonl을 거쳐도 여전히 0이므로 변화가 없어 헷갈리지 않지만, connect()의 목적지 IP 같은 0이 아닌 상수는 반드시 바이트를 거꾸로 읽어야 실제 IP가 나온다.",
+      "decompiler_pattern": "addr.sin_addr.s_addr = htonl(0x7F000001); // 127.0.0.1, 컴파일러가 상수 0x0100007F로 미리 계산하기도 함",
+      "ida_example": "*(_DWORD *)((char *)&addr + 4) = 0x100007F; // 이미 htonl이 적용된 127.0.0.1"
+    },
+    "assembly_pattern": "bswap eax 한 줄로 인라인화되는 경우가 흔하며, 컴파일러가 상수 인자에 대해서는 컴파일 타임에 계산해 즉시값으로 박아 넣기도 한다.",
+    "pitfalls": [
+      "IP 주소 상수를 코드에서 그대로(호스트 순서로) 읽고 htonl 변환을 놓치면 완전히 다른 IP로 해석된다.",
+      "0(INADDR_ANY)처럼 바이트 스왑 결과가 원본과 같은 특수 값 때문에 '변환이 필요 없다'고 착각하기 쉽다."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "htonl",
+      "windows": "htonl (Winsock)"
+    },
+    "related": [
+      "posix-socket",
+      "posix-bind"
+    ],
+    "tags": [
+      "network",
+      "byte order",
+      "endianness",
+      "big-endian",
+      "IPv4 주소",
+      "bswap"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - htonl(3)",
+        "url": "https://man7.org/linux/man-pages/man3/htonl.3.html"
+      },
+      {
+        "title": "Linux man-pages - byteorder(3)",
+        "url": "https://man7.org/linux/man-pages/man3/byteorder.3.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-ntohs",
+    "type": "function",
+    "name": "ntohs",
+    "aliases": [
+      "ntohs(3)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "arpa/inet.h",
+    "library": "libc",
+    "signature": "uint16_t ntohs(uint16_t netshort);",
+    "summary": "16비트 정수를 네트워크 바이트 순서(빅엔디안)에서 호스트 바이트 순서로 변환한다. htons의 역변환으로, 수신한 포트 값을 해석할 때 사용.",
+    "parameters": [
+      {
+        "name": "netshort",
+        "type": "uint16_t",
+        "desc": "네트워크 바이트 순서의 16비트 값(예: sockaddr_in.sin_port)",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "호스트 바이트 순서로 변환된 16비트 값. 실패 개념이 없다.",
+      "failure": "N/A",
+      "meaning": "htons와 동일한 스왑 연산이며 방향만 반대다(x86에서는 htons와 완전히 같은 연산을 수행한다 — 대칭적인 스왑이므로).",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "ntohs(0x901F)",
+        "decimal": 8080,
+        "hex": "0x1F90",
+        "desc": "네트워크 순서 0x901F를 호스트 순서로 바꾸면 포트 8080"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    struct sockaddr_in addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin_family = AF_INET;\n    addr.sin_port = htons(8080);\n    addr.sin_addr.s_addr = htonl(INADDR_ANY);\n    bind(fd, (struct sockaddr *)&addr, sizeof(addr));\n\n    /* 커널이 실제 바인딩한 포트를 다시 사람이 읽을 값으로 변환 */\n    printf(\"listening port (host order) = %u\\n\", ntohs(addr.sin_port));\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "listening port (host order) = 8080\n",
+    "compile_cmd": "gcc ntohs_example.c -o ntohs_example && ./ntohs_example",
+    "internals": "htons와 알고리즘적으로 동일한 2바이트 스왑을 수행한다. 스왑은 대합(involution) 연산이라 방향에 상관없이 같은 결과를 내며, 이름만 '네트워크->호스트'로 구분한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "accept()/recvfrom()으로 채워진 struct sockaddr_in의 sin_port를 사람이 읽을 포트 번호로 출력/비교하는 코드에서 ntohs가 나타난다. 접속 로그, ACL(허용 포트 목록) 검사, 포트 기반 분기 로직을 분석할 때 ntohs가 빠져 있다면 그 비교는 네트워크 순서 값끼리 비교하는 것이므로 개발자의 의도(호스트 순서 상수와 비교)와 실제 동작이 다를 수 있다는 버그 후보로 봐야 한다.",
+      "decompiler_pattern": "port = ntohs(cli.sin_port);\nif ( port == 4444 )\n  handle_special(); // 특정 클라이언트 소스 포트 기반 분기",
+      "ida_example": "v_port = ntohs(*(_WORD *)((char *)&cli + 2));\nif ( v_port == 1337 )\n  ..."
+    },
+    "assembly_pattern": "htons와 동일하게 xchg al, ah 또는 rol ax, 8 한 줄로 인라인화되는 경우가 많다.",
+    "pitfalls": [
+      "네트워크 순서 값과 호스트 순서 상수를 ntohs 변환 없이 직접 비교하면 항상 거짓(또는 엉뚱한 매칭)이 나온다.",
+      "htons/ntohs는 x86에서 동일한 연산이라 소스만 보고 방향을 착각하기 쉽다 — 이름이 아니라 '어디서 온 값인가'로 판단해야 한다."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "ntohs",
+      "windows": "ntohs (Winsock)"
+    },
+    "related": [
+      "posix-socket",
+      "posix-accept"
+    ],
+    "tags": [
+      "network",
+      "byte order",
+      "endianness",
+      "big-endian",
+      "포트 번호",
+      "바이트 스왑"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - ntohs(3)",
+        "url": "https://man7.org/linux/man-pages/man3/ntohs.3.html"
+      },
+      {
+        "title": "Linux man-pages - byteorder(3)",
+        "url": "https://man7.org/linux/man-pages/man3/byteorder.3.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-ntohl",
+    "type": "function",
+    "name": "ntohl",
+    "aliases": [
+      "ntohl(3)"
+    ],
+    "category": "network",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "arpa/inet.h",
+    "library": "libc",
+    "signature": "uint32_t ntohl(uint32_t netlong);",
+    "summary": "32비트 정수를 네트워크 바이트 순서(빅엔디안)에서 호스트 바이트 순서로 변환한다. htonl의 역변환으로, 수신한 IPv4 주소를 해석할 때 사용.",
+    "parameters": [
+      {
+        "name": "netlong",
+        "type": "uint32_t",
+        "desc": "네트워크 바이트 순서의 32비트 값(예: sockaddr_in.sin_addr.s_addr)",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "호스트 바이트 순서로 변환된 32비트 값. 실패 개념이 없다.",
+      "failure": "N/A",
+      "meaning": "htonl과 동일한 스왑 연산을 수행하는 대합(involution) 함수다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "ntohl(0x0100007F)",
+        "decimal": 2130706433,
+        "hex": "0x7F000001",
+        "desc": "네트워크 순서 0x0100007F를 호스트 순서로 바꾸면 127.0.0.1"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <unistd.h>\n#include <arpa/inet.h>\n\nint main(void)\n{\n    int fd = socket(AF_INET, SOCK_STREAM, 0);\n    struct sockaddr_in addr;\n    memset(&addr, 0, sizeof(addr));\n    addr.sin_family = AF_INET;\n    addr.sin_port = htons(9001);\n    inet_pton(AF_INET, \"127.0.0.1\", &addr.sin_addr);\n\n    uint32_t host_order = ntohl(addr.sin_addr.s_addr);\n    printf(\"IP in host order = 0x%08X\\n\", host_order);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "IP in host order = 0x7F000001\n",
+    "compile_cmd": "gcc ntohl_example.c -o ntohl_example && ./ntohl_example",
+    "internals": "htonl과 동일한 4바이트 완전 스왑(bswap)을 수행한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "recvfrom()/accept()로 받은 클라이언트 IP(sin_addr.s_addr)를 정수 비교(IP 화이트리스트, 서브넷 마스크 검사, 특정 IP 하드코딩 우회 체크)에 사용하는 코드에서 ntohl이 등장한다. 이 변환이 빠진 채로 호스트 순서 상수(예: 0x7F000001)와 직접 비교하는 코드가 있다면, 실제로는 그 비교가 항상 실패하거나(원하는 IP가 아닌 다른 IP와 매칭) 리버싱 관점에서 '검증 로직이 무력화된 취약점'일 수 있다.",
+      "decompiler_pattern": "ip = ntohl(cli.sin_addr.s_addr);\nif ( ip == 0x7F000001 ) // 127.0.0.1인지 검사\n  allow_admin();",
+      "ida_example": "v_ip = ntohl(*(_DWORD *)((char *)&cli + 4));\nif ( v_ip == 0x7F000001 )\n  is_localhost = 1; // localhost 전용 기능 우회 지점"
+    },
+    "assembly_pattern": "bswap eax 한 줄로 인라인화되는 경우가 많으며, 이후 cmp eax, imm32 형태로 하드코딩된 IP와 비교하는 코드가 뒤따르는 경우가 흔하다.",
+    "pitfalls": [
+      "IP 비교 로직에서 ntohl 변환을 빼먹으면 검증이 항상 실패하거나 의도와 다른 값과 매칭된다.",
+      "127.0.0.1(localhost) 전용 기능을 IP 정수 비교로만 검사하는 코드는 소스 IP 스푸핑이 가능한 환경(예: UDP, 또는 프록시/포워딩 뒤)에서 우회될 수 있다."
+    ],
+    "security_notes": "localhost/내부망 여부를 IP 정수 비교만으로 판단하는 인증 우회 로직은, 스푸핑이 가능한 조건에서 우회될 수 있으므로 CTF에서 자주 등장하는 '숨겨진 관리자 기능' 패턴과 함께 검토할 가치가 있다.",
+    "equivalents": {
+      "linux": "ntohl",
+      "windows": "ntohl (Winsock)"
+    },
+    "related": [
+      "posix-socket",
+      "posix-accept"
+    ],
+    "tags": [
+      "network",
+      "byte order",
+      "endianness",
+      "big-endian",
+      "IPv4 주소",
+      "IP 화이트리스트",
+      "localhost 체크"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - ntohl(3)",
+        "url": "https://man7.org/linux/man-pages/man3/ntohl.3.html"
+      },
+      {
+        "title": "Linux man-pages - byteorder(3)",
+        "url": "https://man7.org/linux/man-pages/man3/byteorder.3.html"
+      }
+    ]
+  }
+]

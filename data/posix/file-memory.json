@@ -1,0 +1,2308 @@
+[
+  {
+    "id": "posix-open",
+    "type": "function",
+    "name": "open",
+    "aliases": [
+      "open64"
+    ],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "fcntl.h",
+    "library": "libc",
+    "signature": "int open(const char *pathname, int flags, ... /* mode_t mode */);",
+    "summary": "경로명으로 파일을 열거나 생성하고, 성공하면 새 파일 디스크립터를 반환한다.",
+    "parameters": [
+      {
+        "name": "pathname",
+        "type": "const char *",
+        "desc": "열거나 생성할 파일의 경로 (절대/상대)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "flags",
+        "type": "int",
+        "desc": "O_RDONLY/O_WRONLY/O_RDWR 중 하나(하위 2비트, O_ACCMODE)와 O_CREAT/O_TRUNC/O_APPEND 등 부가 플래그를 OR로 조합",
+        "direction": "in",
+        "nullable": false,
+        "notes": "비트 플래그 인자"
+      },
+      {
+        "name": "mode",
+        "type": "mode_t",
+        "desc": "flags에 O_CREAT가 포함된 경우에만 사용되는 가변 인자. 새로 만들 파일의 권한(예: 0644)을 지정하며, 실제 권한은 umask에 의해 마스킹된다.",
+        "direction": "in",
+        "nullable": false,
+        "notes": "O_CREAT 없이 open을 호출하면 이 인자는 완전히 무시된다(스택/레지스터에 쓰레기 값이 있어도 상관없음)."
+      }
+    ],
+    "return_value": {
+      "success": "0 이상의 새 파일 디스크립터",
+      "failure": "-1 (errno 설정, 예: ENOENT, EACCES, EEXIST)",
+      "meaning": "디컴파일된 코드에서 `if ( fd < 0 )` 또는 `if ( (int)fd == -1 )` 형태로 실패를 검사한다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "O_RDONLY",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "읽기 전용으로 연다 (O_ACCMODE 하위 비트)"
+      },
+      {
+        "name": "O_WRONLY",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "쓰기 전용으로 연다"
+      },
+      {
+        "name": "O_RDWR",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "읽기/쓰기 모두 가능하게 연다"
+      },
+      {
+        "name": "O_ACCMODE",
+        "decimal": 3,
+        "hex": "0x3",
+        "desc": "flags에서 접근 모드 하위 2비트만 뽑아내는 마스크"
+      },
+      {
+        "name": "O_CREAT",
+        "decimal": 64,
+        "hex": "0x40",
+        "desc": "파일이 없으면 새로 생성한다. 이때만 세 번째 인자(mode)가 의미를 가진다"
+      },
+      {
+        "name": "O_EXCL",
+        "decimal": 128,
+        "hex": "0x80",
+        "desc": "O_CREAT와 함께 쓰이면, 파일이 이미 존재할 때 open을 실패(EEXIST)시킨다 (심볼릭 링크 공격 방지 및 lock file 구현에 사용)"
+      },
+      {
+        "name": "O_NOCTTY",
+        "decimal": 256,
+        "hex": "0x100",
+        "desc": "여는 파일이 tty이더라도 제어 터미널로 지정하지 않는다"
+      },
+      {
+        "name": "O_TRUNC",
+        "decimal": 512,
+        "hex": "0x200",
+        "desc": "기존 파일 내용을 0바이트로 잘라낸다"
+      },
+      {
+        "name": "O_APPEND",
+        "decimal": 1024,
+        "hex": "0x400",
+        "desc": "모든 write()가 파일 끝에 원자적으로 추가된다 (로그 파일에서 흔함)"
+      },
+      {
+        "name": "O_NONBLOCK",
+        "decimal": 2048,
+        "hex": "0x800",
+        "desc": "블로킹 없이 연다 (FIFO/디바이스 파일에서 주로 사용)"
+      },
+      {
+        "name": "O_DIRECTORY",
+        "decimal": 65536,
+        "hex": "0x10000",
+        "desc": "pathname이 디렉터리가 아니면 실패한다 (심링크를 통한 디렉터리 우회 방지)"
+      },
+      {
+        "name": "O_CLOEXEC",
+        "decimal": 524288,
+        "hex": "0x80000",
+        "desc": "exec 계열 호출 시 자동으로 fd를 닫는다 (fd 유출 방지)"
+      },
+      {
+        "name": "O_CREAT|O_TRUNC (0x240)",
+        "decimal": 576,
+        "hex": "0x240",
+        "desc": "없으면 만들고, 있으면 내용을 지운다 - 로그/출력 파일을 덮어쓸 때 가장 흔한 조합"
+      },
+      {
+        "name": "O_WRONLY|O_CREAT|O_TRUNC (0x241)",
+        "decimal": 577,
+        "hex": "0x241",
+        "desc": "fopen(path, \"w\")와 사실상 동일한 조합. 디컴파일러에서 자주 그대로 노출됨"
+      },
+      {
+        "name": "mode 0644",
+        "decimal": 420,
+        "hex": "0x1A4",
+        "desc": "소유자 rw-, 그룹/기타 r-- (일반 파일 생성 시 흔한 mode 값)"
+      },
+      {
+        "name": "mode 0755",
+        "decimal": 493,
+        "hex": "0x1ED",
+        "desc": "소유자 rwx, 그룹/기타 r-x (실행 파일/디렉터리 생성 시 흔한 mode 값)"
+      }
+    ],
+    "example_code": "#include <fcntl.h>\n#include <unistd.h>\n#include <stdio.h>\n\nint main(void)\n{\n    int fd = open(\"/tmp/revlibc_test.txt\", O_WRONLY | O_CREAT | O_TRUNC, 0644);\n    if (fd < 0) {\n        perror(\"open\");\n        return 1;\n    }\n    write(fd, \"hi\\n\", 3);\n    close(fd);\n    printf(\"fd was %d, now closed\\n\", fd);\n    return 0;\n}\n",
+    "example_output": "fd was 3, now closed\n",
+    "compile_cmd": "gcc open_example.c -o open_example && ./open_example",
+    "internals": "커널은 pathname을 경로 탐색(path lookup)해 inode를 찾고, 프로세스의 fd 테이블에서 비어있는 가장 작은 번호를 골라 그 inode를 가리키는 파일 디스크립트(struct file)를 연결한다. O_CREAT가 있고 파일이 없으면 mode & ~umask 권한으로 새 inode를 만든다. 내부적으로 x86-64 Linux에서는 openat 시스템 콜(open은 openat(AT_FDCWD, ...)의 래퍼)로 귀결된다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "open의 두 번째 인자(flags)를 숫자 리터럴로 보고 어떤 파일을 어떤 목적으로 여는지 즉시 판단할 수 있어야 한다. flags=2(O_RDWR)나 577(0x241, O_WRONLY|O_CREAT|O_TRUNC)처럼 상수가 인라인 숫자로 나타나는 경우가 매우 흔하다. CTF에서는 flag/키/설정 파일 경로 문자열과 open 호출을 연결해 추적하는 것이 핵심 동선이다. mode 인자가 있는데 flags에 O_CREAT(0x40) 비트가 없다면 mode는 완전히 무시되는 dead argument이므로 분석 시간을 낭비하지 말 것.",
+      "decompiler_pattern": "fd = open(\"flag.txt\", 0);\nif ( fd < 0 )\n  exit(1);\nread(fd, buf, 0x100u);",
+      "ida_example": "v3 = open(\"/home/user/flag\", 0);  // O_RDONLY\nif ( v3 == -1 )\n  fail();\nread(v3, s, 0x40uLL);"
+    },
+    "assembly_pattern": "정적 바이너리나 syscall을 직접 사용하는 셸코드에서는 x86-64 기준 open의 syscall 번호 2(mov eax, 2 ; syscall)로 나타나거나, 최신 glibc/커널에서는 openat(syscall 257, mov eax, 0x101)로 컴파일되기도 한다. rdi=pathname, rsi=flags, rdx=mode 순서로 인자가 채워진다.",
+    "pitfalls": [
+      "O_CREAT 없이 open을 호출하면서 세 번째 인자를 넘기는 코드가 있어도 그 값은 커널에 의해 무시된다 - 반대로 O_CREAT가 있는데 mode 인자를 빼먹으면 스택/레지스터의 쓰레기 값이 파일 권한이 되어 보안 취약점이 될 수 있다.",
+      "open()의 성공 판정은 `fd >= 0`이지 `fd == 0`이 아니다. 0은 유효한 fd(보통 표준입력이 닫혀있을 때 재사용됨)이다.",
+      "O_TRUNC와 O_APPEND를 동시에 쓰는 경우는 드물지만 논리적으로 상충되지 않는지 문맥을 봐야 한다."
+    ],
+    "security_notes": "O_CREAT|O_EXCL 없이 임시 파일 경로를 미리 확인 후 open하는 TOCTOU(Time-of-check-to-time-of-use) 패턴은 심볼릭 링크 공격에 취약할 수 있다. setuid 바이너리가 사용자 제어 경로로 open하는 코드는 임의 파일 쓰기/읽기의 단서가 될 수 있다.",
+    "equivalents": {
+      "linux": "open / openat",
+      "windows": "CreateFileA/CreateFileW"
+    },
+    "related": [
+      "posix-openat",
+      "posix-close",
+      "posix-read",
+      "posix-write",
+      "pattern-buffer-overflow"
+    ],
+    "tags": [
+      "file descriptor",
+      "O_CREAT",
+      "O_TRUNC",
+      "O_RDWR",
+      "flag file",
+      "TOCTOU",
+      "fopen 대응"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - open(2)",
+        "url": "https://man7.org/linux/man-pages/man2/open.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - open",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/open.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-openat",
+    "type": "function",
+    "name": "openat",
+    "aliases": [],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2008",
+    "header": "fcntl.h",
+    "library": "libc",
+    "signature": "int openat(int dirfd, const char *pathname, int flags, ... /* mode_t mode */);",
+    "summary": "dirfd로 지정된 디렉터리를 기준으로 상대 경로 pathname을 열거나 생성한다.",
+    "parameters": [
+      {
+        "name": "dirfd",
+        "type": "int",
+        "desc": "pathname이 상대 경로일 때 기준이 되는 디렉터리의 fd. AT_FDCWD(-100)를 넘기면 open()과 동일하게 현재 작업 디렉터리 기준이 된다.",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "pathname",
+        "type": "const char *",
+        "desc": "절대 경로이면 dirfd는 무시된다",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "flags",
+        "type": "int",
+        "desc": "open()과 동일한 O_* 플래그",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "mode",
+        "type": "mode_t",
+        "desc": "O_CREAT일 때만 사용",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0 이상의 새 파일 디스크립터",
+      "failure": "-1 (errno 설정, dirfd가 유효하지 않으면 EBADF)",
+      "meaning": "open()과 동일하게 `< 0` 검사로 실패를 판별한다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "O_RDONLY",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "open()과 동일한 플래그 값을 공유한다"
+      },
+      {
+        "name": "O_CREAT",
+        "decimal": 64,
+        "hex": "0x40",
+        "desc": "파일 생성"
+      },
+      {
+        "name": "O_DIRECTORY",
+        "decimal": 65536,
+        "hex": "0x10000",
+        "desc": "디렉터리 fd를 얻을 때 자주 함께 쓰임 (예: 이후 fstatat/openat 체이닝)"
+      }
+    ],
+    "example_code": "#include <fcntl.h>\n#include <stdio.h>\n\nint main(void)\n{\n    int dfd = open(\"/tmp\", O_DIRECTORY | O_RDONLY);\n    int fd = openat(dfd, \"revlibc_at.txt\", O_WRONLY | O_CREAT | O_TRUNC, 0644);\n    if (fd >= 0) {\n        printf(\"opened relative to /tmp, fd=%d\\n\", fd);\n        close(fd);\n    }\n    close(dfd);\n    return 0;\n}\n",
+    "example_output": "opened relative to /tmp, fd=4\n",
+    "compile_cmd": "gcc openat_example.c -o openat_example && ./openat_example",
+    "internals": "리눅스 커널의 실제 파일 open 시스템 콜은 openat 하나뿐이며, glibc의 open()은 내부적으로 openat(AT_FDCWD, pathname, flags, mode)를 호출하는 얇은 래퍼다. dirfd를 지정하면 TOCTOU 경쟁 조건 없이 '이 디렉터리 안에서만' 경로를 해석하도록 강제할 수 있다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "정적으로 링크되었거나 최신 glibc로 컴파일된 바이너리에서는 소스 코드에 open()이라고 써 있어도 디컴파일 결과에는 openat(-100, path, flags, mode)로 나타나는 경우가 많다. 첫 번째 인자가 -100(0xFFFFFF9C)이면 그냥 open()과 동일하게 해석하면 된다.",
+      "decompiler_pattern": "v1 = openat(-100, \"config.ini\", 0);",
+      "ida_example": "fd = openat(0xFFFFFF9CLL, s, 2, 0);  // AT_FDCWD, O_RDWR"
+    },
+    "assembly_pattern": "x86-64 Linux 시스템 콜 번호 257(mov eax, 0x101 ; syscall). rdi=dirfd, rsi=pathname, rdx=flags, r10=mode 순서.",
+    "pitfalls": [
+      "dirfd가 AT_FDCWD(-100)로 나타나면 실질적으로 open()과 동일한 동작이라는 것을 놓치지 말 것.",
+      "dirfd가 특정 디렉터리 fd라면 그 디렉터리가 어디서 열렸는지(open/openat 체인)를 역추적해야 실제 대상 경로를 알 수 있다."
+    ],
+    "security_notes": "dirfd + O_NOFOLLOW/O_DIRECTORY 조합은 심볼릭 링크 기반 경로 우회 공격을 막기 위한 안전한 패턴으로 자주 쓰인다.",
+    "equivalents": {
+      "linux": "openat",
+      "windows": "CreateFileA (RelativeTo 개념 없음, NtCreateFile의 ObjectAttributes.RootDirectory가 유사)"
+    },
+    "related": [
+      "posix-open",
+      "posix-close",
+      "posix-fork"
+    ],
+    "tags": [
+      "AT_FDCWD",
+      "relative open",
+      "TOCTOU 방지",
+      "syscall 257"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - openat(2)",
+        "url": "https://man7.org/linux/man-pages/man2/openat.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - openat",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/openat.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-close",
+    "type": "function",
+    "name": "close",
+    "aliases": [],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "int close(int fd);",
+    "summary": "열려 있는 파일 디스크립터를 닫아 커널 리소스를 회수한다.",
+    "parameters": [
+      {
+        "name": "fd",
+        "type": "int",
+        "desc": "닫을 파일 디스크립터",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정, 예: EBADF - 이미 닫혔거나 유효하지 않은 fd)",
+      "meaning": "`if (close(fd) < 0)` 형태로 실패를 검사하지만, 리버싱 대상 코드에서는 반환값 체크 자체를 생략하는 경우도 매우 흔하다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <fcntl.h>\n#include <unistd.h>\n#include <stdio.h>\n\nint main(void)\n{\n    int fd = open(\"/tmp/revlibc_close.txt\", O_WRONLY | O_CREAT, 0644);\n    int r = close(fd);\n    printf(\"close returned %d\\n\", r);\n    r = close(fd); /* 이중 close: 실패해야 정상 */\n    printf(\"second close returned %d\\n\", r);\n    return 0;\n}\n",
+    "example_output": "close returned 0\nsecond close returned -1\n",
+    "compile_cmd": "gcc close_example.c -o close_example && ./close_example",
+    "internals": "프로세스의 fd 테이블 엔트리를 제거하고, 그 fd가 파일 디스크립트(struct file)에 대한 마지막 참조였다면 커널이 실제로 파일을 닫고 자원을 해제한다. 같은 fd 번호는 다음 open/socket/pipe 호출에서 재사용될 수 있다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "close 자체보다는 '어떤 fd를 닫았는가'와 '그 이후 같은 번호가 재사용되는가'를 추적하는 것이 중요하다. fd leak(자원 누수) 취약점을 찾을 때, 에러 경로에서 close가 호출되지 않는 지점을 찾는 패턴 분석에 사용된다. Use-after-close나 double close는 힙 UAF와 유사한 로직 버그를 만들 수 있다.",
+      "decompiler_pattern": "close(fd);\nfd = -1;",
+      "ida_example": "close(v3);\nreturn 0;"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 3 (mov eax, 3 ; syscall), rdi=fd.",
+    "pitfalls": [
+      "double close(같은 fd를 두 번 close)는 그 사이에 다른 스레드가 같은 번호로 새 fd를 열었다면 엉뚱한 파일/소켓을 닫는 fd 재사용 버그로 이어질 수 있다.",
+      "close()의 반환값을 확인하지 않으면 NFS 등에서 발생하는 지연된 쓰기 오류(EIO)를 놓칠 수 있다."
+    ],
+    "security_notes": "fd 재사용은 CTF pwnable에서 '내가 닫은 fd 번호를 공격자가 원하는 객체(예: 소켓)로 다시 채우기' 같은 트릭의 기반이 된다.",
+    "equivalents": {
+      "linux": "close",
+      "windows": "CloseHandle"
+    },
+    "related": [
+      "posix-open",
+      "posix-dup",
+      "posix-dup2"
+    ],
+    "tags": [
+      "fd leak",
+      "double close",
+      "resource cleanup"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - close(2)",
+        "url": "https://man7.org/linux/man-pages/man2/close.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - close",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/close.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-read",
+    "type": "function",
+    "name": "read",
+    "aliases": [],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "ssize_t read(int fd, void *buf, size_t count);",
+    "summary": "파일 디스크립터 fd로부터 최대 count바이트를 읽어 buf에 저장한다.",
+    "parameters": [
+      {
+        "name": "fd",
+        "type": "int",
+        "desc": "읽을 파일 디스크립터",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "buf",
+        "type": "void *",
+        "desc": "읽은 데이터를 저장할 버퍼",
+        "direction": "out",
+        "nullable": false,
+        "notes": "호출자가 최소 count바이트를 미리 할당해야 한다"
+      },
+      {
+        "name": "count",
+        "type": "size_t",
+        "desc": "요청하는 최대 바이트 수",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0 이상: 실제로 읽은 바이트 수 (0은 EOF)",
+      "failure": "-1 (errno 설정, 예: EINTR, EAGAIN)",
+      "meaning": "반환값은 '요청한 만큼' 이 아니라 '실제로 읽은' 바이트 수다. count보다 작은 값이 반환되는 short read는 파이프/소켓/시그널 인터럽트 상황에서 정상이다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <unistd.h>\n#include <stdio.h>\n\nint main(void)\n{\n    char buf[16];\n    ssize_t n = read(0, buf, sizeof(buf));\n    if (n > 0) {\n        write(1, buf, n);\n    }\n    printf(\"\\nread %zd bytes\\n\", n);\n    return 0;\n}\n",
+    "example_output": "hello\nread 6 bytes\n",
+    "compile_cmd": "gcc read_example.c -o read_example && echo hello | ./read_example",
+    "internals": "커널은 파일/파이프/소켓 종류에 따라 서로 다른 read 구현(file_operations->read)을 호출한다. 일반 파일은 요청한 count까지 채우려 시도하지만, 파이프/소켓/터미널은 '현재 사용 가능한 만큼'만 반환하고 바로 리턴하는 경우가 흔하다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "read()의 반환값을 buf에 쓰인 유효한 데이터 길이로 그대로 신뢰하는지, 아니면 count와 비교 없이 그대로 사용하는지(버퍼 오버플로/미초기화 메모리 사용의 단서)를 반드시 확인한다. CTF pwnable에서 read(fd, buf, big_size) 형태로 스택/힙 버퍼에 사용자 입력을 그대로 채우는 코드가 오버플로 취약점의 시작점인 경우가 매우 많다.",
+      "decompiler_pattern": "n = read(0, buf, 0x100u);\nbuf[n] = 0;",
+      "ida_example": "v2 = read(fd, buf, 0x200uLL);\nif ( v2 <= 0 )\n  break;"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 0 (mov eax, 0 ; syscall), rdi=fd, rsi=buf, rdx=count. 셸코드나 정적 바이너리에서 그대로 이 번호가 노출되는 경우가 많다.",
+    "pitfalls": [
+      "요청한 count 바이트가 항상 채워진다고 가정하면 안 된다 (short read). 루프를 돌며 남은 만큼 다시 read해야 완전한 데이터를 보장한다.",
+      "반환값을 부호 없는 타입으로 취급하면 -1(오류)이 매우 큰 양수로 해석되어 이후 memcpy 등에서 힙/스택 오버플로로 이어질 수 있다."
+    ],
+    "security_notes": "사용자 입력 크기를 검증하지 않고 고정 크기 스택 버퍼에 read하는 패턴은 스택 버퍼 오버플로의 대표적인 시그니처다.",
+    "equivalents": {
+      "linux": "read",
+      "windows": "ReadFile"
+    },
+    "related": [
+      "posix-write",
+      "posix-pread",
+      "pattern-buffer-overflow",
+      "c-fgets"
+    ],
+    "tags": [
+      "short read",
+      "buffer overflow",
+      "stdin",
+      "syscall 0"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - read(2)",
+        "url": "https://man7.org/linux/man-pages/man2/read.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - read",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/read.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-write",
+    "type": "function",
+    "name": "write",
+    "aliases": [],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "ssize_t write(int fd, const void *buf, size_t count);",
+    "summary": "buf에서 최대 count바이트를 읽어 파일 디스크립터 fd에 쓴다.",
+    "parameters": [
+      {
+        "name": "fd",
+        "type": "int",
+        "desc": "쓸 파일 디스크립터",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "buf",
+        "type": "const void *",
+        "desc": "기록할 데이터가 들어있는 버퍼",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "count",
+        "type": "size_t",
+        "desc": "쓰려는 바이트 수",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0 이상: 실제로 쓴 바이트 수",
+      "failure": "-1 (errno 설정, 예: EPIPE - 상대가 닫은 파이프/소켓에 쓸 때)",
+      "meaning": "read와 마찬가지로 반환값이 count보다 작을 수 있는 short write가 존재한다 (특히 파이프/소켓, 시그널로 인터럽트된 경우).",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <unistd.h>\n#include <string.h>\n\nint main(void)\n{\n    const char *msg = \"hello from write()\\n\";\n    ssize_t n = write(1, msg, strlen(msg));\n    return (n < 0) ? 1 : 0;\n}\n",
+    "example_output": "hello from write()\n",
+    "compile_cmd": "gcc write_example.c -o write_example && ./write_example",
+    "internals": "read와 대칭적으로 file_operations->write를 호출한다. 일반 파일은 페이지 캐시에 기록 후 나중에 디스크로 flush되며(버퍼드 I/O), 파이프/소켓은 커널 버퍼가 가득 차면 EAGAIN(넌블로킹) 또는 블로킹으로 대기한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "write(1, buf, len) 또는 write(2, buf, len)는 각각 stdout/stderr로의 출력이며, printf/puts가 내부적으로 결국 write 시스템 콜로 귀결된다는 것을 알면 최적화된 바이너리에서 문자열 출력을 추적하기 쉽다. CTF에서 write(fd, &leaked_addr, 8) 같은 패턴은 주소 유출(정보 노출) 취약점의 핵심이다.",
+      "decompiler_pattern": "write(1, &canary, 8);",
+      "ida_example": "write(1, buf, strlen(buf));"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 1 (mov eax, 1 ; syscall), rdi=fd, rsi=buf, rdx=count. 'Hello World' 수준의 정적 바이너리에서 흔히 보이는 3-syscall 패턴(open/write/close 또는 write만)의 핵심.",
+    "pitfalls": [
+      "write의 반환값을 확인하지 않고 항상 count 전체가 기록됐다고 가정하면 대용량 소켓 전송 시 데이터 유실이 발생할 수 있다.",
+      "write(2, ...)와 write(1, ...)을 혼동하면 stderr/stdout 출력 흐름을 잘못 해석하게 된다."
+    ],
+    "security_notes": "포맷 스트링 버그와 결합된 write 호출(예: dprintf 경유)이나, 힙/스택 주소를 그대로 write하는 코드는 ASLR 우회를 위한 정보 유출 가젯일 수 있다.",
+    "equivalents": {
+      "linux": "write",
+      "windows": "WriteFile"
+    },
+    "related": [
+      "posix-read",
+      "posix-pwrite",
+      "posix-dup2"
+    ],
+    "tags": [
+      "short write",
+      "stdout",
+      "stderr",
+      "info leak",
+      "syscall 1"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - write(2)",
+        "url": "https://man7.org/linux/man-pages/man2/write.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - write",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/write.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-pread",
+    "type": "function",
+    "name": "pread",
+    "aliases": [
+      "pread64"
+    ],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "ssize_t pread(int fd, void *buf, size_t count, off_t offset);",
+    "summary": "파일 오프셋을 변경하지 않고, 지정한 offset 위치에서 count바이트를 읽는다.",
+    "parameters": [
+      {
+        "name": "fd",
+        "type": "int",
+        "desc": "읽을 파일 디스크립터 (seek 가능한 파일이어야 함)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "buf",
+        "type": "void *",
+        "desc": "읽은 데이터를 저장할 버퍼",
+        "direction": "out",
+        "nullable": false
+      },
+      {
+        "name": "count",
+        "type": "size_t",
+        "desc": "요청 바이트 수",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "offset",
+        "type": "off_t",
+        "desc": "읽기를 시작할 파일 내 절대 위치",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0 이상: 실제로 읽은 바이트 수",
+      "failure": "-1 (errno 설정, ESPIPE - 파이프/소켓처럼 seek 불가능한 fd에 사용 시)",
+      "meaning": "read()와 동일하게 short read가 가능하다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <unistd.h>\n#include <fcntl.h>\n#include <stdio.h>\n\nint main(void)\n{\n    int fd = open(\"/etc/hostname\", O_RDONLY);\n    char buf[8] = {0};\n    ssize_t n = pread(fd, buf, sizeof(buf) - 1, 2); /* 3번째 바이트부터 */\n    printf(\"read %zd bytes: %s\\n\", n, buf);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "read 7 bytes: st-abc\n(/etc/hostname 내용/길이는 호스트마다 다르므로 실제 값은 환경에 따라 달라진다)",
+    "compile_cmd": "gcc pread_example.c -o pread_example && ./pread_example",
+    "internals": "lseek + read를 원자적으로 수행하는 것과 동일한 효과를 내지만, 파일의 현재 오프셋(f_pos)을 전혀 건드리지 않는다. 멀티스레드 환경에서 여러 스레드가 같은 fd를 공유하며 서로 다른 위치를 읽을 때 경쟁 조건 없이 사용할 수 있다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "pread가 보이면 '파일 내 임의 오프셋 접근'을 하고 있다는 뜻이며, 커스텀 파일 포맷 파서(헤더/섹션 테이블을 오프셋으로 직접 찾아가는 코드)에서 자주 나타난다. offset 인자가 사용자 입력에서 유래하면 임의 파일 읽기(arbitrary file read) 취약점의 단서가 될 수 있다.",
+      "decompiler_pattern": "n = pread(fd, header, 0x40, 0);",
+      "ida_example": "pread64(fd, &buf, 0x1000LL, user_offset);"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 17 (pread64).",
+    "pitfalls": [
+      "pread는 fd의 오프셋을 바꾸지 않으므로, 이후 이어서 read()를 호출하면 pread로 읽은 위치가 아니라 이전 read 오프셋에서 계속된다.",
+      "seek 불가능한 fd(파이프, 소켓, 일부 캐릭터 디바이스)에 사용하면 ESPIPE로 실패한다."
+    ],
+    "security_notes": "검증되지 않은 offset 값을 그대로 pread에 넘기면 파일 내 임의 위치 읽기로 이어질 수 있다 (경로 자체는 고정이어도 오프셋 조작만으로 정보 유출 가능).",
+    "equivalents": {
+      "linux": "pread",
+      "windows": "ReadFile + OVERLAPPED.Offset"
+    },
+    "related": [
+      "posix-read",
+      "posix-lseek",
+      "posix-pwrite"
+    ],
+    "tags": [
+      "random access",
+      "positional read",
+      "file parser",
+      "arbitrary offset"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - pread(2)",
+        "url": "https://man7.org/linux/man-pages/man2/pread.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - pread",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/pread.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-pwrite",
+    "type": "function",
+    "name": "pwrite",
+    "aliases": [
+      "pwrite64"
+    ],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);",
+    "summary": "파일 오프셋을 변경하지 않고, 지정한 offset 위치에 count바이트를 쓴다.",
+    "parameters": [
+      {
+        "name": "fd",
+        "type": "int",
+        "desc": "쓸 파일 디스크립터",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "buf",
+        "type": "const void *",
+        "desc": "기록할 데이터",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "count",
+        "type": "size_t",
+        "desc": "쓰려는 바이트 수",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "offset",
+        "type": "off_t",
+        "desc": "쓰기를 시작할 파일 내 절대 위치",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0 이상: 실제로 쓴 바이트 수",
+      "failure": "-1 (errno 설정)",
+      "meaning": "write()와 동일하게 short write가 가능하다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <unistd.h>\n#include <fcntl.h>\n\nint main(void)\n{\n    int fd = open(\"/tmp/revlibc_pwrite.bin\", O_RDWR | O_CREAT, 0644);\n    pwrite(fd, \"AAAA\", 4, 0);\n    pwrite(fd, \"BBBB\", 4, 4);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "(생성된 /tmp/revlibc_pwrite.bin 내용: AAAABBBB)\n",
+    "compile_cmd": "gcc pwrite_example.c -o pwrite_example && ./pwrite_example",
+    "internals": "pread와 대칭적으로 f_pos를 건드리지 않고 지정한 offset에 직접 쓴다. 파일 크기보다 큰 offset에 쓰면 그 사이 구간은 sparse hole(0으로 채워진 것처럼 보이는 미할당 블록)이 된다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "커스텀 파일 포맷을 만들거나 로그 파일의 특정 레코드를 갱신하는 코드에서 나타난다. 데이터베이스 엔진, 로그 로테이션, 코어덤프 생성기 등에서 자주 보인다.",
+      "decompiler_pattern": "pwrite(fd, record, sizeof(record), record_index * sizeof(record));",
+      "ida_example": "pwrite64(fd, buf, 0x100LL, offset);"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 18 (pwrite64).",
+    "pitfalls": [
+      "O_APPEND 플래그가 설정된 fd에 pwrite를 호출하면 offset 인자가 무시되고 항상 파일 끝에 기록된다는 점에 유의해야 한다."
+    ],
+    "security_notes": "사용자 제어 offset으로 pwrite하는 코드는 파일 내 임의 위치 덮어쓰기(예: 권한 파일, 설정 파일 변조)로 이어질 수 있다.",
+    "equivalents": {
+      "linux": "pwrite",
+      "windows": "WriteFile + OVERLAPPED.Offset"
+    },
+    "related": [
+      "posix-write",
+      "posix-lseek",
+      "posix-pread"
+    ],
+    "tags": [
+      "positional write",
+      "sparse file",
+      "log rotation"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - pwrite(2)",
+        "url": "https://man7.org/linux/man-pages/man2/pwrite.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - pwrite",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/pwrite.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-lseek",
+    "type": "function",
+    "name": "lseek",
+    "aliases": [],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "off_t lseek(int fd, off_t offset, int whence);",
+    "summary": "파일 디스크립터의 읽기/쓰기 위치(오프셋)를 이동시킨다.",
+    "parameters": [
+      {
+        "name": "fd",
+        "type": "int",
+        "desc": "대상 파일 디스크립터",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "offset",
+        "type": "off_t",
+        "desc": "whence 기준으로부터의 상대/절대 이동량 (바이트, 음수 가능)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "whence",
+        "type": "int",
+        "desc": "SEEK_SET/SEEK_CUR/SEEK_END 중 하나",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "새로운 파일 오프셋(파일 시작 기준 바이트 수)",
+      "failure": "(off_t)-1 (errno 설정, 예: EINVAL, ESPIPE)",
+      "meaning": "lseek(fd, 0, SEEK_CUR)는 이동 없이 현재 오프셋만 조회하는 관용적 패턴이다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "SEEK_SET",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "offset을 파일 시작 기준 절대 위치로 설정"
+      },
+      {
+        "name": "SEEK_CUR",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "offset을 현재 위치 기준 상대 이동으로 적용"
+      },
+      {
+        "name": "SEEK_END",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "offset을 파일 끝 기준 상대 이동으로 적용 (파일 크기 구할 때 lseek(fd,0,SEEK_END) 패턴)"
+      },
+      {
+        "name": "SEEK_DATA",
+        "decimal": 3,
+        "hex": "0x3",
+        "desc": "(Linux 확장) offset 이후 데이터가 있는 다음 위치를 찾음 - sparse file 처리"
+      },
+      {
+        "name": "SEEK_HOLE",
+        "decimal": 4,
+        "hex": "0x4",
+        "desc": "(Linux 확장) offset 이후 hole(빈 공간)의 다음 위치를 찾음 - sparse file 처리"
+      }
+    ],
+    "example_code": "#include <unistd.h>\n#include <fcntl.h>\n#include <stdio.h>\n\nint main(void)\n{\n    int fd = open(\"/etc/hostname\", O_RDONLY);\n    off_t size = lseek(fd, 0, SEEK_END);\n    printf(\"file size = %ld\\n\", (long)size);\n    lseek(fd, 0, SEEK_SET);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "file size = 8\n(/etc/hostname 내용/길이는 호스트마다 다르므로 실제 값은 환경에 따라 달라진다)",
+    "compile_cmd": "gcc lseek_example.c -o lseek_example && ./lseek_example",
+    "internals": "커널의 struct file에 저장된 f_pos 필드를 갱신할 뿐, 실제 디스크 I/O는 발생하지 않는다. 현재 파일 크기보다 큰 offset으로 seek한 뒤 write하면 그 사이 구간은 sparse hole이 되어 디스크 공간을 실제로 차지하지 않을 수 있다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "lseek(fd, 0, SEEK_END) 뒤에 이어지는 lseek(fd, 0, SEEK_SET) 또는 반환값 저장 패턴은 '파일 크기를 구해서 그만큼 버퍼를 할당'하는 매우 흔한 관용구다. whence 값 2(SEEK_END)가 인라인 상수로 보이면 파일 크기 계산 루틴임을 바로 알 수 있다.",
+      "decompiler_pattern": "sz = lseek(fd, 0, 2);\nlseek(fd, 0, 0);\nbuf = malloc(sz);\nread(fd, buf, sz);",
+      "ida_example": "v2 = lseek(fd, 0LL, 2);  // SEEK_END\nlseek(fd, 0LL, 0);       // SEEK_SET"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 8 (mov eax, 8 ; syscall). whence 값 0/1/2가 rdx에 그대로 실려간다.",
+    "pitfalls": [
+      "lseek은 파일 오프셋만 바꿀 뿐 파일을 실제로 늘리지 않는다 - 그 뒤에 write가 있어야 파일 크기가 실제로 늘어난다(sparse file).",
+      "파이프/소켓/FIFO에는 lseek을 쓸 수 없다 (ESPIPE)."
+    ],
+    "security_notes": "정수 오버플로가 있는 offset 계산과 결합되면 의도치 않은 파일 위치에 read/write가 발생할 수 있다.",
+    "equivalents": {
+      "linux": "lseek",
+      "windows": "SetFilePointer / SetFilePointerEx"
+    },
+    "related": [
+      "posix-pread",
+      "posix-pwrite",
+      "posix-read"
+    ],
+    "tags": [
+      "SEEK_SET",
+      "SEEK_END",
+      "file size",
+      "sparse file",
+      "offset"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - lseek(2)",
+        "url": "https://man7.org/linux/man-pages/man2/lseek.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - lseek",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/lseek.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-stat",
+    "type": "function",
+    "name": "stat",
+    "aliases": [
+      "stat64"
+    ],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/stat.h",
+    "library": "libc",
+    "signature": "int stat(const char *pathname, struct stat *statbuf);",
+    "summary": "경로명이 가리키는 파일의 메타데이터(크기, 권한, 타입, 시간 등)를 조회한다.",
+    "parameters": [
+      {
+        "name": "pathname",
+        "type": "const char *",
+        "desc": "조회할 파일 경로. 심볼릭 링크면 그 대상을 따라간다",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "statbuf",
+        "type": "struct stat *",
+        "desc": "결과가 채워질 구조체 (st_mode, st_size, st_uid, st_mtime 등)",
+        "direction": "out",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정, 예: ENOENT - 파일 없음, EACCES)",
+      "meaning": "존재 여부 확인 용도로도 흔히 사용된다 (`if (stat(path,&st)==0) 존재`).",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "S_IFMT",
+        "decimal": 61440,
+        "hex": "0xF000",
+        "desc": "st_mode에서 파일 타입 비트만 추출하는 마스크"
+      },
+      {
+        "name": "S_IFSOCK",
+        "decimal": 49152,
+        "hex": "0xC000",
+        "desc": "소켓"
+      },
+      {
+        "name": "S_IFLNK",
+        "decimal": 40960,
+        "hex": "0xA000",
+        "desc": "심볼릭 링크"
+      },
+      {
+        "name": "S_IFREG",
+        "decimal": 32768,
+        "hex": "0x8000",
+        "desc": "일반 파일"
+      },
+      {
+        "name": "S_IFBLK",
+        "decimal": 24576,
+        "hex": "0x6000",
+        "desc": "블록 디바이스"
+      },
+      {
+        "name": "S_IFDIR",
+        "decimal": 16384,
+        "hex": "0x4000",
+        "desc": "디렉터리"
+      },
+      {
+        "name": "S_IFCHR",
+        "decimal": 8192,
+        "hex": "0x2000",
+        "desc": "캐릭터 디바이스"
+      },
+      {
+        "name": "S_IFIFO",
+        "decimal": 4096,
+        "hex": "0x1000",
+        "desc": "FIFO/파이프"
+      },
+      {
+        "name": "S_ISUID",
+        "decimal": 2048,
+        "hex": "0x800",
+        "desc": "setuid 비트"
+      },
+      {
+        "name": "S_ISGID",
+        "decimal": 1024,
+        "hex": "0x400",
+        "desc": "setgid 비트"
+      }
+    ],
+    "example_code": "#include <sys/stat.h>\n#include <stdio.h>\n\nint main(void)\n{\n    struct stat st;\n    if (stat(\"/etc/hostname\", &st) == 0) {\n        printf(\"size=%ld is_reg=%d\\n\", (long)st.st_size, S_ISREG(st.st_mode));\n    }\n    return 0;\n}\n",
+    "example_output": "size=8 is_reg=1\n(/etc/hostname 내용/길이는 호스트마다 다르므로 실제 값은 환경에 따라 달라진다)",
+    "compile_cmd": "gcc stat_example.c -o stat_example && ./stat_example",
+    "internals": "커널이 inode 정보를 그대로 struct stat으로 복사해 반환한다. 심볼릭 링크는 자동으로 따라가므로(dereference), 링크 자체의 정보를 얻으려면 lstat을 써야 한다. st_mode 필드의 상위 비트에 파일 타입(S_IFMT로 마스킹), 하위 비트에 rwx 권한이 함께 들어있다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "st_mode를 S_IFMT(0xF000)로 마스킹해 S_IFDIR/S_IFREG/S_IFLNK와 비교하는 코드는 파일 타입 분기 로직이다. st_size로 버퍼 크기를 계산하거나, st_uid/st_gid로 권한 검사를 하는 코드가 자주 나타난다. 안티 디버깅에서 stat 등으로 /proc/self/status 같은 특정 파일의 존재 여부를 확인하는 패턴도 있다.",
+      "decompiler_pattern": "if ( !stat(path, &st) && (st.st_mode & 0xF000) == 0x8000 )\n  process_regular_file();",
+      "ida_example": "stat(v4, &stat_buf);\nif ( (stat_buf.st_mode & 0xF000) == 0x4000 )\n  is_dir = 1;"
+    },
+    "assembly_pattern": "x86-64 Linux에서는 실제로 newfstatat(syscall 262) 시스템 콜로 컴파일되는 경우가 대부분이며, glibc의 stat()는 그 래퍼다.",
+    "pitfalls": [
+      "stat은 심볼릭 링크를 따라간다 - 링크 자체 정보가 필요하면 lstat을 써야 한다.",
+      "stat 호출과 그 결과를 사용하는 시점 사이에 파일이 바뀔 수 있는 TOCTOU 문제가 있다."
+    ],
+    "security_notes": "stat으로 존재 확인 후 open하는 check-then-use 패턴은 TOCTOU 경쟁 조건에 취약할 수 있다 (심볼릭 링크로 교체 공격).",
+    "equivalents": {
+      "linux": "stat / newfstatat",
+      "windows": "GetFileAttributesEx"
+    },
+    "related": [
+      "posix-fstat",
+      "posix-lstat",
+      "posix-access"
+    ],
+    "tags": [
+      "file metadata",
+      "S_IFMT",
+      "file type",
+      "TOCTOU",
+      "st_mode"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - stat(2)",
+        "url": "https://man7.org/linux/man-pages/man2/stat.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - stat",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/stat.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-fstat",
+    "type": "function",
+    "name": "fstat",
+    "aliases": [
+      "fstat64"
+    ],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/stat.h",
+    "library": "libc",
+    "signature": "int fstat(int fd, struct stat *statbuf);",
+    "summary": "경로가 아니라 이미 열려 있는 파일 디스크립터로 파일 메타데이터를 조회한다.",
+    "parameters": [
+      {
+        "name": "fd",
+        "type": "int",
+        "desc": "조회할 열린 파일 디스크립터",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "statbuf",
+        "type": "struct stat *",
+        "desc": "결과가 채워질 구조체",
+        "direction": "out",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정, 예: EBADF)",
+      "meaning": "stat과 동일한 성공/실패 규약.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "S_IFMT",
+        "decimal": 61440,
+        "hex": "0xF000",
+        "desc": "st_mode 파일 타입 마스크 (stat과 공유)"
+      },
+      {
+        "name": "S_IFREG",
+        "decimal": 32768,
+        "hex": "0x8000",
+        "desc": "일반 파일"
+      },
+      {
+        "name": "S_IFDIR",
+        "decimal": 16384,
+        "hex": "0x4000",
+        "desc": "디렉터리"
+      }
+    ],
+    "example_code": "#include <sys/stat.h>\n#include <fcntl.h>\n#include <stdio.h>\n\nint main(void)\n{\n    int fd = open(\"/etc/hostname\", O_RDONLY);\n    struct stat st;\n    fstat(fd, &st);\n    printf(\"size via fd = %ld\\n\", (long)st.st_size);\n    close(fd);\n    return 0;\n}\n",
+    "example_output": "size via fd = 8\n(/etc/hostname 내용/길이는 호스트마다 다르므로 실제 값은 환경에 따라 달라진다)",
+    "compile_cmd": "gcc fstat_example.c -o fstat_example && ./fstat_example",
+    "internals": "경로 탐색 없이 fd가 가리키는 inode에서 바로 정보를 읽으므로 stat보다 경로 관련 TOCTOU 문제에서 자유롭다. malloc 구현체나 mmap 전 파일 크기 확인용으로 open 직후 fstat을 호출하는 조합이 매우 흔하다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "open() 직후 fstat()으로 st_size를 얻고, 그 값을 mmap의 length 인자로 넘기는 3연속 패턴(open -> fstat -> mmap)은 파일을 메모리에 매핑해 파싱하는 전형적인 로더 코드다. ELF/PE 로더, 압축 해제기, 파일 뷰어 등에서 자주 나타난다.",
+      "decompiler_pattern": "fstat(fd, &st);\nmap = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);",
+      "ida_example": "fstat64(fd, &stat_buf);\nfile_size = stat_buf.st_size;"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 5 (fstat).",
+    "pitfalls": [
+      "fd가 소켓/파이프처럼 일반 파일이 아니면 st_size 등 일부 필드는 의미가 없거나 0으로 나온다."
+    ],
+    "security_notes": "st_size를 검증 없이 malloc/mmap 크기로 사용하면, 매우 큰 파일이나 조작된 파일 크기로 인해 메모리 부족/정수 오버플로가 발생할 수 있다.",
+    "equivalents": {
+      "linux": "fstat",
+      "windows": "GetFileSizeEx / GetFileInformationByHandle"
+    },
+    "related": [
+      "posix-stat",
+      "posix-mmap",
+      "posix-open"
+    ],
+    "tags": [
+      "open+fstat+mmap 패턴",
+      "file size",
+      "loader"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - fstat(2)",
+        "url": "https://man7.org/linux/man-pages/man2/fstat.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - fstat",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/fstat.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-lstat",
+    "type": "function",
+    "name": "lstat",
+    "aliases": [
+      "lstat64"
+    ],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/stat.h",
+    "library": "libc",
+    "signature": "int lstat(const char *pathname, struct stat *statbuf);",
+    "summary": "stat과 동일하지만, pathname이 심볼릭 링크이면 그 링크 자체의 정보를 반환한다(따라가지 않음).",
+    "parameters": [
+      {
+        "name": "pathname",
+        "type": "const char *",
+        "desc": "조회할 경로",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "statbuf",
+        "type": "struct stat *",
+        "desc": "결과 구조체",
+        "direction": "out",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정)",
+      "meaning": "stat과 동일한 성공/실패 규약.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "S_IFLNK",
+        "decimal": 40960,
+        "hex": "0xA000",
+        "desc": "lstat 결과 st_mode가 이 값이면 대상이 심볼릭 링크 자체임을 의미"
+      },
+      {
+        "name": "S_IFMT",
+        "decimal": 61440,
+        "hex": "0xF000",
+        "desc": "파일 타입 마스크"
+      }
+    ],
+    "example_code": "#include <sys/stat.h>\n#include <stdio.h>\n#include <unistd.h>\n\nint main(void)\n{\n    symlink(\"/etc/hostname\", \"/tmp/revlibc_link\");\n    struct stat st;\n    lstat(\"/tmp/revlibc_link\", &st);\n    printf(\"is_symlink=%d\\n\", S_ISLNK(st.st_mode));\n    unlink(\"/tmp/revlibc_link\");\n    return 0;\n}\n",
+    "example_output": "is_symlink=1\n",
+    "compile_cmd": "gcc lstat_example.c -o lstat_example && ./lstat_example",
+    "internals": "stat과 커널 구현을 공유하지만 경로 탐색의 마지막 컴포넌트에서 심볼릭 링크를 만나면 그것을 따라가지 않고(dereference 안 함) 링크 자체의 inode 정보를 반환한다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "심볼릭 링크 여부를 판별해야 하는 백업 도구, 아카이버(tar 등), 정적 분석 도구에서 나타난다. stat 대신 lstat이 쓰였다면 '링크를 따라가면 안 되는' 보안 민감 경로 처리 코드일 가능성을 시사한다.",
+      "decompiler_pattern": "lstat(path, &st);\nif ( (st.st_mode & 0xF000) == 0xA000 )\n  handle_symlink();",
+      "ida_example": "lstat64(v2, &stat_buf);"
+    },
+    "assembly_pattern": "x86-64 Linux에서도 결국 newfstatat(AT_SYMLINK_NOFOLLOW 플래그 포함) 시스템 콜로 귀결된다.",
+    "pitfalls": [
+      "lstat 대신 stat을 잘못 사용하면 심볼릭 링크 공격(악성 링크가 가리키는 실제 파일 정보를 보게 됨)에 노출될 수 있다."
+    ],
+    "security_notes": "권한 검사나 파일 무결성 검사 로직에서 lstat 대신 stat을 쓰는 실수는 심볼릭 링크를 이용한 검사 우회로 이어질 수 있다.",
+    "equivalents": {
+      "linux": "lstat",
+      "windows": "GetFileAttributesEx (FILE_FLAG_OPEN_REPARSE_POINT와 유사한 의미)"
+    },
+    "related": [
+      "posix-stat",
+      "posix-fstat"
+    ],
+    "tags": [
+      "symlink",
+      "S_IFLNK",
+      "link attack",
+      "no dereference"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - lstat(2)",
+        "url": "https://man7.org/linux/man-pages/man2/lstat.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - lstat",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/lstat.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-access",
+    "type": "function",
+    "name": "access",
+    "aliases": [],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "int access(const char *pathname, int mode);",
+    "summary": "실행 중인 프로세스의 실제 uid/gid 기준으로 파일에 대한 접근 권한(존재/읽기/쓰기/실행)을 검사한다.",
+    "parameters": [
+      {
+        "name": "pathname",
+        "type": "const char *",
+        "desc": "검사할 경로",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "mode",
+        "type": "int",
+        "desc": "F_OK 또는 R_OK/W_OK/X_OK를 OR로 조합",
+        "direction": "in",
+        "nullable": false,
+        "notes": "비트 플래그 인자"
+      }
+    ],
+    "return_value": {
+      "success": "0 (요청한 모든 접근이 허용됨)",
+      "failure": "-1 (errno 설정, 예: ENOENT - 파일 없음, EACCES - 권한 없음)",
+      "meaning": "`if (access(path, F_OK) == 0)` 는 '파일이 존재한다'는 뜻이다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "F_OK",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "파일이 존재하는지만 검사"
+      },
+      {
+        "name": "X_OK",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "실행 권한 검사"
+      },
+      {
+        "name": "W_OK",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "쓰기 권한 검사"
+      },
+      {
+        "name": "R_OK",
+        "decimal": 4,
+        "hex": "0x4",
+        "desc": "읽기 권한 검사"
+      },
+      {
+        "name": "R_OK|W_OK (0x6)",
+        "decimal": 6,
+        "hex": "0x6",
+        "desc": "읽기+쓰기 권한 모두 검사"
+      }
+    ],
+    "example_code": "#include <unistd.h>\n#include <stdio.h>\n\nint main(void)\n{\n    if (access(\"/etc/hostname\", F_OK) == 0)\n        printf(\"exists\\n\");\n    if (access(\"/proc/self/status\", R_OK) == 0)\n        printf(\"proc status readable\\n\");\n    return 0;\n}\n",
+    "example_output": "exists\nproc status readable\n",
+    "compile_cmd": "gcc access_example.c -o access_example && ./access_example",
+    "internals": "setuid 프로그램이 '실제 사용자'의 권한으로 검사하고 싶을 때 사용하도록 설계되었다 (open 등은 effective uid를 사용). 커널이 실제 파일을 열지 않고 권한 비트만 확인하므로 open보다 가볍지만, 검사와 실제 사용 사이에 시간차가 생겨 TOCTOU 문제의 고전적 원인이 된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "access(\"/proc/self/status\", ...) 나 access(\"/proc/self/status\", F_OK) 같은 호출 뒤에 파일을 열어 TracerPid 값을 확인하는 코드는 ptrace 기반 안티 디버깅 루틴의 일부로 흔히 나타난다. access(path, F_OK)로 파일 존재만 검사한 뒤 곧바로 open하는 check-then-open 패턴도 자주 보인다.",
+      "decompiler_pattern": "if ( !access(\"/proc/self/status\", 0) )\n{\n  fd = open(\"/proc/self/status\", 0);\n  // TracerPid 파싱으로 디버거 탐지\n}",
+      "ida_example": "if ( !access(v2, 0) )\n  goto LABEL_open_flag_file;"
+    },
+    "assembly_pattern": "x86-64 Linux에서는 실제로 faccessat(syscall 269)로 컴파일되는 경우가 많다.",
+    "pitfalls": [
+      "access로 권한을 확인한 뒤 실제 open/write까지 사이에 파일이 바뀔 수 있는 TOCTOU 경쟁 조건이 존재한다 - '검사 후 사용'은 setuid 프로그램에서 특히 위험하다.",
+      "access는 effective uid가 아니라 real uid 기준이므로, setuid 바이너리에서 실제로 open이 성공할지를 access 결과만으로 보장할 수 없다."
+    ],
+    "security_notes": "check-then-open(access 후 open) 패턴은 심볼릭 링크 교체를 이용한 TOCTOU 공격의 대표적 취약점 패턴이다.",
+    "equivalents": {
+      "linux": "access / faccessat",
+      "windows": "GetFileAttributes (존재 확인용으로 유사하게 사용)"
+    },
+    "related": [
+      "posix-stat",
+      "posix-open"
+    ],
+    "tags": [
+      "F_OK",
+      "R_OK",
+      "TOCTOU",
+      "anti-debug",
+      "/proc/self/status",
+      "ptrace 탐지"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - access(2)",
+        "url": "https://man7.org/linux/man-pages/man2/access.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - access",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/access.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-unlink",
+    "type": "function",
+    "name": "unlink",
+    "aliases": [],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "int unlink(const char *pathname);",
+    "summary": "디렉터리 엔트리(하드 링크)를 제거한다. 참조 카운트가 0이 되고 열려 있는 fd도 없으면 실제 파일이 삭제된다.",
+    "parameters": [
+      {
+        "name": "pathname",
+        "type": "const char *",
+        "desc": "삭제할 경로 (디렉터리는 불가, rmdir 사용해야 함)",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정, 예: ENOENT, EISDIR, EACCES)",
+      "meaning": "성공 시 디렉터리 엔트리는 즉시 제거되지만, 다른 프로세스가 그 파일을 열어둔 상태라면 실제 디스크 블록 해제는 마지막 fd가 close될 때까지 지연된다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <unistd.h>\n#include <fcntl.h>\n#include <stdio.h>\n\nint main(void)\n{\n    int fd = open(\"/tmp/revlibc_unlink.txt\", O_CREAT | O_WRONLY, 0644);\n    unlink(\"/tmp/revlibc_unlink.txt\"); /* 파일 이름만 제거, fd는 여전히 유효 */\n    write(fd, \"still alive\\n\", 12);\n    close(fd); /* 이 시점에 실제 데이터 블록 해제 */\n    printf(\"done\\n\");\n    return 0;\n}\n",
+    "example_output": "done\n",
+    "compile_cmd": "gcc unlink_example.c -o unlink_example && ./unlink_example",
+    "internals": "inode의 하드 링크 카운트(nlink)를 1 감소시키고 디렉터리에서 이름 엔트리를 제거한다. nlink가 0이 되고 열려 있는 파일 디스크립터도 모두 닫혀야 커널이 실제로 데이터 블록을 회수한다 - 이 성질을 이용해 '열어놓고 즉시 unlink'하는 임시 파일 패턴이 널리 쓰인다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "open() 직후 곧바로 unlink()하는 패턴은 '프로세스 종료 시 자동으로 정리되는 익명 임시 파일'을 만드는 매우 흔한 관용구다(디스크에는 이름 없는 파일로 남아 fd로만 접근 가능). 악성코드가 드롭한 페이로드 파일을 실행 후 즉시 흔적을 지우는 안티 포렌식 기법으로도 사용된다.",
+      "decompiler_pattern": "fd = open(tmp_path, O_CREAT | O_RDWR, 0600);\nunlink(tmp_path);\n// 이후 fd만으로 파일 사용, 이름은 이미 사라짐",
+      "ida_example": "write(fd, payload, len);\nunlink(path);  // 흔적 제거"
+    },
+    "assembly_pattern": "x86-64 Linux에서는 unlinkat(syscall 87)으로 컴파일되는 경우가 흔하다 (unlink는 unlinkat(AT_FDCWD, ...)의 래퍼).",
+    "pitfalls": [
+      "unlink는 디렉터리를 지울 수 없다 (EISDIR) - rmdir을 사용해야 한다.",
+      "unlink 직후에도 이미 열린 fd로는 계속 파일에 접근할 수 있다는 점을 놓치면 '파일이 삭제됐는데 왜 데이터가 남아있지'라는 혼란이 생긴다."
+    ],
+    "security_notes": "open+unlink 조합은 안티 포렌식/흔적 제거 기법으로 악용될 수 있으며, 동시에 정상적인 임시 파일 관리 기법이기도 하므로 문맥으로 판단해야 한다.",
+    "equivalents": {
+      "linux": "unlink / unlinkat",
+      "windows": "DeleteFile"
+    },
+    "related": [
+      "posix-open",
+      "posix-close",
+      "posix-rename"
+    ],
+    "tags": [
+      "temp file",
+      "anti-forensics",
+      "delete-on-close 유사 패턴",
+      "nlink"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - unlink(2)",
+        "url": "https://man7.org/linux/man-pages/man2/unlink.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - unlink",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/unlink.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-rename",
+    "type": "function",
+    "name": "rename",
+    "aliases": [],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int rename(const char *oldpath, const char *newpath);",
+    "summary": "파일/디렉터리의 이름을 바꾸거나 다른 디렉터리로 이동시킨다 (같은 파일시스템 내에서는 원자적).",
+    "parameters": [
+      {
+        "name": "oldpath",
+        "type": "const char *",
+        "desc": "기존 경로",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "newpath",
+        "type": "const char *",
+        "desc": "새 경로. 이미 존재하면 (조건에 따라) 덮어써진다",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정, 예: EXDEV - 서로 다른 파일시스템 간 이동 불가, ENOTEMPTY)",
+      "meaning": "성공하면 oldpath는 더 이상 존재하지 않고 newpath로 접근 가능하다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n#include <fcntl.h>\n#include <unistd.h>\n\nint main(void)\n{\n    int fd = open(\"/tmp/revlibc_old.txt\", O_CREAT | O_WRONLY, 0644);\n    close(fd);\n    int r = rename(\"/tmp/revlibc_old.txt\", \"/tmp/revlibc_new.txt\");\n    printf(\"rename returned %d\\n\", r);\n    unlink(\"/tmp/revlibc_new.txt\");\n    return 0;\n}\n",
+    "example_output": "rename returned 0\n",
+    "compile_cmd": "gcc rename_example.c -o rename_example && ./rename_example",
+    "internals": "같은 파일시스템 안에서는 데이터를 복사하지 않고 디렉터리 엔트리(이름-inode 매핑)만 원자적으로 교체한다. newpath가 이미 존재하는 파일이면 (디렉터리가 아닌 한) 별도 알림 없이 덮어쓴다. 서로 다른 파일시스템/마운트 간에는 EXDEV로 실패하므로, 이 경우 애플리케이션은 직접 복사 후 unlink로 대체해야 한다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "설정 파일을 '임시 파일에 쓰고 -> rename으로 교체'하는 원자적 업데이트 패턴(atomic write)에서 자주 나타난다. 랜섬웨어가 원본 파일을 암호화한 뒤 확장자를 바꿔 rename하는 패턴과도 연관지어 볼 수 있다.",
+      "decompiler_pattern": "write_to_tmp(tmp_path, data);\nrename(tmp_path, real_path); // 원자적 교체",
+      "ida_example": "rename(tmp_name, config_path);"
+    },
+    "assembly_pattern": "x86-64 Linux에서는 renameat2(syscall 316) 또는 renameat(syscall 264)로 컴파일되는 경우가 흔하다.",
+    "pitfalls": [
+      "서로 다른 마운트 포인트/파일시스템 사이에서는 rename이 EXDEV로 실패한다 - 이 경우 실제 구현은 복사+삭제로 폴백해야 한다.",
+      "newpath가 이미 존재하면 경고 없이 덮어써지므로, 덮어쓰기 여부를 사전에 확인하지 않은 코드는 데이터 손실을 유발할 수 있다."
+    ],
+    "security_notes": "임시 파일 rename 패턴은 원자적 업데이트를 보장하기 위한 정상적인 기법이지만, 임시 파일 자체의 권한이 허술하면 그 사이 다른 프로세스가 내용을 읽거나 바꿀 수 있다.",
+    "equivalents": {
+      "linux": "rename / renameat2",
+      "windows": "MoveFileEx"
+    },
+    "related": [
+      "posix-unlink",
+      "posix-open"
+    ],
+    "tags": [
+      "atomic write",
+      "config update",
+      "ransomware rename pattern"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - rename(2)",
+        "url": "https://man7.org/linux/man-pages/man2/rename.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - rename",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/rename.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-dup",
+    "type": "function",
+    "name": "dup",
+    "aliases": [],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "int dup(int oldfd);",
+    "summary": "oldfd와 같은 파일/소켓을 가리키는 사용 가능한 가장 작은 번호의 새 파일 디스크립터를 만든다.",
+    "parameters": [
+      {
+        "name": "oldfd",
+        "type": "int",
+        "desc": "복제할 기존 파일 디스크립터",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0 이상: 새로 할당된 파일 디스크립터 번호",
+      "failure": "-1 (errno 설정, 예: EBADF, EMFILE - fd 테이블 한도 초과)",
+      "meaning": "새 fd는 oldfd와 동일한 파일 오프셋/상태 플래그를 공유하는 별개의 fd 번호다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "STDIN_FILENO",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "표준 입력 fd (dup의 흔한 대상)"
+      },
+      {
+        "name": "STDOUT_FILENO",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "표준 출력 fd"
+      },
+      {
+        "name": "STDERR_FILENO",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "표준 에러 fd"
+      }
+    ],
+    "example_code": "#include <unistd.h>\n#include <stdio.h>\n\nint main(void)\n{\n    int newfd = dup(1); /* stdout 복제 */\n    printf(\"new fd = %d\\n\", newfd);\n    write(newfd, \"via duplicated fd\\n\", 19);\n    close(newfd);\n    return 0;\n}\n",
+    "example_output": "new fd = 3\nvia duplicated fd\n",
+    "compile_cmd": "gcc dup_example.c -o dup_example && ./dup_example",
+    "internals": "프로세스의 fd 테이블에서 oldfd 엔트리가 가리키는 동일한 struct file(파일 오프셋, 열기 플래그 포함)을 참조하는 새 엔트리를 만든다. 두 fd는 서로 다른 번호이지만 lseek을 하나로 하면 다른 쪽 오프셋도 함께 바뀐다(같은 open file description 공유).",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "dup 자체보다는 dup2/dup3로 표준 입출력을 리다이렉트하는 패턴이 CTF에서 훨씬 자주 등장한다. dup는 셸/파이프라인 구현, 로그를 파일과 화면에 동시에 남기는 tee류 도구에서 주로 나타난다.",
+      "decompiler_pattern": "backup_stdout = dup(1);",
+      "ida_example": "saved_fd = dup(1);"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 32 (dup).",
+    "pitfalls": [
+      "dup으로 만든 새 fd는 oldfd와 별개의 번호이므로 close(oldfd)를 해도 새 fd는 계속 유효하다 - 반대로 fd 하나에 O_NONBLOCK 등 상태 플래그를 바꾸면 복제된 다른 fd에도 그 변경이 반영된다(동일 open file description 공유).",
+      "printf 계열(stdio, 버퍼링됨)과 write()(시스템 콜, 버퍼링 없음)를 같은 fd에 섞어 쓰면 실제 커널에 도달하는 순서가 소스 코드상의 호출 순서와 달라질 수 있다. 예: printf 이후 write를 호출해도 파이프로 리다이렉션하면 write 결과가 먼저 보일 수 있다."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "dup",
+      "windows": "DuplicateHandle"
+    },
+    "related": [
+      "posix-dup2",
+      "posix-close",
+      "posix-pipe"
+    ],
+    "tags": [
+      "file descriptor duplication",
+      "fd table",
+      "shared offset"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - dup(2)",
+        "url": "https://man7.org/linux/man-pages/man2/dup.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - dup",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/dup.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-dup2",
+    "type": "function",
+    "name": "dup2",
+    "aliases": [
+      "dup3"
+    ],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "int dup2(int oldfd, int newfd);",
+    "summary": "newfd 번호를 강제로 지정해 oldfd를 복제한다. newfd가 이미 열려 있으면 조용히 닫고 재사용한다.",
+    "parameters": [
+      {
+        "name": "oldfd",
+        "type": "int",
+        "desc": "복제할 원본 파일 디스크립터",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "newfd",
+        "type": "int",
+        "desc": "결과가 위치할 fd 번호 (예: 0/1/2 표준 스트림)",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "newfd (요청한 번호 그대로)",
+      "failure": "-1 (errno 설정, 예: EBADF)",
+      "meaning": "성공하면 newfd는 oldfd와 동일한 파일/소켓을 가리키게 되고, 이후 newfd에 대한 read/write는 그 대상으로 이루어진다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "STDIN_FILENO",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "표준 입력 - CTF pwnable에서 dup2(sockfd, 0)의 대상"
+      },
+      {
+        "name": "STDOUT_FILENO",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "표준 출력 - dup2(sockfd, 1)의 대상"
+      },
+      {
+        "name": "STDERR_FILENO",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "표준 에러 - dup2(sockfd, 2)의 대상"
+      }
+    ],
+    "example_code": "#include <unistd.h>\n#include <fcntl.h>\n#include <stdio.h>\n\nint main(void)\n{\n    int fd = open(\"/tmp/revlibc_dup2.log\", O_CREAT | O_WRONLY | O_TRUNC, 0644);\n    dup2(fd, 1); /* 이제 printf/stdout이 파일로 감 */\n    close(fd);\n    printf(\"this goes to the file, not the terminal\\n\");\n    return 0;\n}\n",
+    "example_output": "(터미널에는 아무것도 출력되지 않고, /tmp/revlibc_dup2.log 파일에 텍스트가 기록됨)\n",
+    "compile_cmd": "gcc dup2_example.c -o dup2_example && ./dup2_example",
+    "internals": "newfd가 이미 열려 있으면 dup2는 원자적으로(open 중간에 다른 스레드가 끼어들 틈 없이) 그것을 close하고 oldfd와 같은 open file description을 가리키도록 재설정한다. oldfd == newfd이면 아무 것도 하지 않고 newfd를 그대로 반환한다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "CTF pwnable에서 원격 셸(리버스/바인드 셸)을 만드는 핵심 코드가 바로 dup2(sockfd, 0); dup2(sockfd, 1); dup2(sockfd, 2); 세 줄이다. 소켓 fd를 표준입출력(0,1,2)에 덮어씌운 뒤 execve(\"/bin/sh\", ...)를 호출하면, 이후 셸의 모든 입출력이 그 소켓을 통해 이루어진다 - 이것이 'fd shuffling'이라 불리는 셸코드/익스플로잇의 표준 마무리 단계다. 디스어셈블리에서 dup2 호출이 0/1/2를 대상으로 반복되는 3연속 패턴이 보이면 즉시 리버스 셸/커넥트백 셸코드로 의심해야 한다.",
+      "decompiler_pattern": "sockfd = accept(listen_fd, 0, 0);\ndup2(sockfd, 0);\ndup2(sockfd, 1);\ndup2(sockfd, 2);\nexecve(\"/bin/sh\", argv, envp);",
+      "ida_example": "dup2(v3, 0);\ndup2(v3, 1);\ndup2(v3, 2);\nexecve(\"/bin/sh\", &args, 0LL);"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 33 (dup2). 셸코드에서는 종종 dup2 대신 syscall 292(dup3)나 반복되는 mov edi, sockfd ; mov esi, N ; mov eax, 33 ; syscall 패턴으로 0,1,2에 대해 3번 나타난다.",
+    "pitfalls": [
+      "dup2(oldfd, newfd)의 인자 순서를 dup2(newfd, oldfd)로 착각하기 쉽다 - 첫 번째가 '원본', 두 번째가 '덮어씌워질 번호'다.",
+      "newfd가 원래 열려 있던 파일(예: 로그 파일)을 조용히 닫아버리므로, 그 fd를 다른 곳에서 참조하고 있었다면 예기치 않게 끊어진다."
+    ],
+    "security_notes": "리버스 셸 페이로드의 표준 시그니처(소켓 fd를 0/1/2로 dup2한 뒤 execve)는 익스플로잇 탐지 시 가장 먼저 찾아야 할 패턴 중 하나다.",
+    "equivalents": {
+      "linux": "dup2 / dup3",
+      "windows": "SetStdHandle + DuplicateHandle"
+    },
+    "related": [
+      "posix-dup",
+      "posix-pipe",
+      "posix-execve",
+      "posix-socket",
+      "posix-fork"
+    ],
+    "tags": [
+      "fd shuffling",
+      "reverse shell",
+      "connect-back shell",
+      "stdin stdout stderr redirect",
+      "dup2(sockfd,0)"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - dup2(2)",
+        "url": "https://man7.org/linux/man-pages/man2/dup2.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - dup2",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/dup.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-pipe",
+    "type": "function",
+    "name": "pipe",
+    "aliases": [
+      "pipe2"
+    ],
+    "category": "file",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "int pipe(int pipefd[2]);",
+    "summary": "커널 버퍼로 연결된 단방향 파이프를 만들어 읽기용/쓰기용 파일 디스크립터 한 쌍을 반환한다.",
+    "parameters": [
+      {
+        "name": "pipefd",
+        "type": "int[2]",
+        "desc": "결과가 채워질 배열. pipefd[0]은 읽기 전용 끝, pipefd[1]은 쓰기 전용 끝",
+        "direction": "out",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정, 예: EMFILE, ENFILE)",
+      "meaning": "성공하면 pipefd[0]/pipefd[1]에 유효한 fd 두 개가 채워진다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "O_CLOEXEC (pipe2 플래그)",
+        "decimal": 524288,
+        "hex": "0x80000",
+        "desc": "pipe2에서 생성된 두 fd에 exec 시 자동 close 속성을 부여"
+      },
+      {
+        "name": "O_NONBLOCK (pipe2 플래그)",
+        "decimal": 2048,
+        "hex": "0x800",
+        "desc": "pipe2에서 넌블로킹 파이프 생성"
+      }
+    ],
+    "example_code": "#include <unistd.h>\n#include <stdio.h>\n#include <string.h>\n\nint main(void)\n{\n    int fds[2];\n    pipe(fds);\n    write(fds[1], \"hi\\n\", 3);\n    char buf[8] = {0};\n    read(fds[0], buf, sizeof(buf));\n    printf(\"child would read: %s\", buf);\n    close(fds[0]);\n    close(fds[1]);\n    return 0;\n}\n",
+    "example_output": "child would read: hi\n",
+    "compile_cmd": "gcc pipe_example.c -o pipe_example && ./pipe_example",
+    "internals": "커널 내부 링 버퍼(기본 64KB) 위에 만들어진 익명 IPC 채널이다. pipefd[1]에 쓴 데이터는 pipefd[0]에서 FIFO 순서로 읽힌다. 일반적으로 fork() 이전에 pipe()를 호출해 부모/자식이 각각 한쪽 끝을 갖고, 반대쪽 끝을 close하는 방식으로 단방향 통신을 구성한다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "pipe() -> fork() -> (부모: 한쪽 fd close, 자식: 반대쪽 fd close) -> dup2로 stdin/stdout에 연결 -> execve 순서는 셸 파이프라인(예: `ls | grep`) 구현이나, 자식 프로세스의 출력을 부모가 캡처하는 popen류 구현의 표준 골격이다. CTF에서는 자식 프로세스(sandbox 실행기)와 통신하는 채널로도 자주 쓰인다.",
+      "decompiler_pattern": "pipe(fds);\nif ( !fork() ) {\n  close(fds[0]);\n  dup2(fds[1], 1);\n  execve(\"/bin/ls\", argv, envp);\n}\nclose(fds[1]);\nread(fds[0], buf, size);",
+      "ida_example": "pipe(pipefd);\npid = fork();\nif ( !pid )\n{\n  dup2(pipefd[1], 1);\n  execve(cmd, args, env);\n}"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 22 (pipe) 또는 293 (pipe2).",
+    "pitfalls": [
+      "pipefd[0]과 pipefd[1]의 읽기/쓰기 방향을 반대로 착각하는 실수가 흔하다 - [0]이 읽기, [1]이 쓰기다.",
+      "부모/자식 양쪽이 파이프의 양 끝을 모두 열어둔 채로 있으면 EOF가 전달되지 않아 read가 영원히 블로킹될 수 있다 (사용하지 않는 쪽은 반드시 close 해야 함)."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "pipe / pipe2",
+      "windows": "CreatePipe"
+    },
+    "related": [
+      "posix-dup2",
+      "posix-fork",
+      "posix-execve",
+      "posix-dup"
+    ],
+    "tags": [
+      "IPC",
+      "fork+pipe",
+      "popen 유사 구현",
+      "process communication"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - pipe(2)",
+        "url": "https://man7.org/linux/man-pages/man2/pipe.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - pipe",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/pipe.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-mmap",
+    "type": "function",
+    "name": "mmap",
+    "aliases": [
+      "mmap64"
+    ],
+    "category": "memory",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/mman.h",
+    "library": "libc",
+    "signature": "void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);",
+    "summary": "파일 또는 익명 메모리를 프로세스 주소 공간에 매핑해 새 메모리 영역의 시작 주소를 반환한다.",
+    "parameters": [
+      {
+        "name": "addr",
+        "type": "void *",
+        "desc": "매핑을 원하는 힌트 주소. 보통 NULL을 넘겨 커널이 알아서 고르게 한다",
+        "direction": "in",
+        "nullable": true
+      },
+      {
+        "name": "length",
+        "type": "size_t",
+        "desc": "매핑할 크기(바이트). 내부적으로 페이지 크기로 올림된다",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "prot",
+        "type": "int",
+        "desc": "PROT_* 플래그 조합 (페이지 접근 권한)",
+        "direction": "in",
+        "nullable": false,
+        "notes": "비트 플래그 인자"
+      },
+      {
+        "name": "flags",
+        "type": "int",
+        "desc": "MAP_* 플래그 조합 (공유 방식, 익명 여부 등)",
+        "direction": "in",
+        "nullable": false,
+        "notes": "비트 플래그 인자, MAP_SHARED/MAP_PRIVATE 중 하나는 필수"
+      },
+      {
+        "name": "fd",
+        "type": "int",
+        "desc": "매핑할 파일의 fd. MAP_ANONYMOUS이면 무시되며 관례적으로 -1을 넘김",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "offset",
+        "type": "off_t",
+        "desc": "파일 매핑 시작 오프셋. 페이지 크기의 배수여야 함",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "매핑된 영역의 시작 주소 (void *)",
+      "failure": "MAP_FAILED, 즉 (void *)-1 (errno 설정, 예: ENOMEM)",
+      "meaning": "NULL이 아니라 MAP_FAILED((void*)-1)와 비교해야 한다 - mmap은 주소 0을 정상적으로 반환하지 않지만 관례상 NULL 비교는 틀린 코드다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "PROT_NONE",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "접근 불가 (가드 페이지 용도)"
+      },
+      {
+        "name": "PROT_READ",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "읽기 허용"
+      },
+      {
+        "name": "PROT_WRITE",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "쓰기 허용"
+      },
+      {
+        "name": "PROT_EXEC",
+        "decimal": 4,
+        "hex": "0x4",
+        "desc": "실행 허용"
+      },
+      {
+        "name": "PROT_READ|PROT_WRITE (0x3)",
+        "decimal": 3,
+        "hex": "0x3",
+        "desc": "쉘코드를 담을 익명 버퍼를 만들 때 1차로 흔히 쓰는 조합 - 이후 mprotect로 EXEC 추가"
+      },
+      {
+        "name": "MAP_SHARED",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "다른 프로세스와 매핑을 공유, 쓰기는 파일에 반영됨"
+      },
+      {
+        "name": "MAP_PRIVATE",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "copy-on-write 매핑, 쓰기는 파일에 반영되지 않음 (실행 파일 로딩에 주로 사용)"
+      },
+      {
+        "name": "MAP_SHARED_VALIDATE",
+        "decimal": 3,
+        "hex": "0x3",
+        "desc": "MAP_SHARED이면서 알 수 없는 플래그를 엄격히 검증 (Linux 4.15+)"
+      },
+      {
+        "name": "MAP_FIXED",
+        "decimal": 16,
+        "hex": "0x10",
+        "desc": "addr 힌트를 강제 - 기존 매핑을 덮어씀 (익스플로잇에서 특정 주소를 강제로 매핑할 때 사용)"
+      },
+      {
+        "name": "MAP_ANONYMOUS",
+        "decimal": 32,
+        "hex": "0x20",
+        "desc": "파일과 무관한 익명 메모리를 할당 (fd 무시, 0으로 초기화됨) - 셸코드 버퍼 할당의 표준 플래그"
+      },
+      {
+        "name": "MAP_GROWSDOWN",
+        "decimal": 256,
+        "hex": "0x100",
+        "desc": "스택처럼 아래로 자라는 매핑 (스택 구현용)"
+      },
+      {
+        "name": "MAP_LOCKED",
+        "decimal": 8192,
+        "hex": "0x2000",
+        "desc": "mlock과 동일하게 스왑되지 않도록 페이지 고정"
+      },
+      {
+        "name": "MAP_NORESERVE",
+        "decimal": 16384,
+        "hex": "0x4000",
+        "desc": "swap 공간을 미리 예약하지 않음"
+      },
+      {
+        "name": "MAP_POPULATE",
+        "decimal": 32768,
+        "hex": "0x8000",
+        "desc": "매핑 즉시 페이지 테이블을 미리 채워 최초 접근 시 page fault를 줄임"
+      },
+      {
+        "name": "MAP_STACK",
+        "decimal": 131072,
+        "hex": "0x20000",
+        "desc": "스레드/시그널 스택용 매핑 힌트"
+      },
+      {
+        "name": "MAP_HUGETLB",
+        "decimal": 262144,
+        "hex": "0x40000",
+        "desc": "huge page 사용"
+      },
+      {
+        "name": "MAP_PRIVATE|MAP_ANONYMOUS (0x22)",
+        "decimal": 34,
+        "hex": "0x22",
+        "desc": "익명 개인 메모리 - malloc의 대용량 할당(mmap threshold 초과 시), 셸코드 버퍼, JIT 코드 영역에서 가장 흔히 보이는 flags 조합"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n#include <sys/mman.h>\n\nint main(void)\n{\n    size_t len = 4096;\n    void *mem = mmap(NULL, len, PROT_READ | PROT_WRITE,\n                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);\n    if (mem == MAP_FAILED) {\n        perror(\"mmap\");\n        return 1;\n    }\n    memcpy(mem, \"shellcode placeholder\", 21);\n    /* 이후 mprotect(mem, len, PROT_READ|PROT_EXEC)로 실행권한 부여 가능 */\n    printf(\"mapped at %p: %s\\n\", mem, (char *)mem);\n    munmap(mem, len);\n    return 0;\n}\n",
+    "example_output": "mapped at 0x7f... : shellcode placeholder\n",
+    "compile_cmd": "gcc mmap_example.c -o mmap_example && ./mmap_example",
+    "internals": "커널은 실제 물리 메모리를 즉시 채우지 않고 프로세스의 가상 주소 공간에 VMA(Virtual Memory Area)만 등록한다. 실제 물리 페이지 할당은 최초로 그 주소에 접근할 때 발생하는 페이지 폴트(demand paging) 시점에 이루어진다. 파일 매핑(fd 지정)일 경우 페이지 폴트 시 해당 파일 내용을 읽어와 채운다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "MAP_ANONYMOUS로 PROT_READ|PROT_WRITE 메모리를 할당한 뒤 그 안에 데이터를 채우고, 나중에 mprotect(addr, len, PROT_READ|PROT_EXEC 또는 PROT_EXEC)로 실행 권한을 추가하는 mmap -> memcpy/decrypt -> mprotect -> call 4단계 흐름은 CTF 셸코드 로더, JIT 컴파일러, 패커의 표준 골격이다(posix-mprotect 항목의 RWX 패턴과 연결됨). 또한 open+fstat+mmap 조합으로 파일 전체를 메모리에 매핑해 파싱하는 것도 매우 흔한 패턴이다. flags 값 0x22(MAP_PRIVATE|MAP_ANONYMOUS)가 인라인 숫자로 보이면 익명 메모리 할당임을 즉시 알 수 있다.",
+      "decompiler_pattern": "buf = mmap(0, 0x1000, 3, 0x22, -1, 0);\nmemcpy(buf, shellcode, shellcode_len);\nmprotect(buf, 0x1000, 5);\n((void(*)(void))buf)();",
+      "ida_example": "v1 = mmap(0LL, 0x1000uLL, 3, 0x22, -1, 0LL);\nif ( v1 != (void *)-1LL )\n{\n  memcpy(v1, payload, len);\n  mprotect(v1, 0x1000uLL, 5);\n  ((void (__fastcall *)(void))v1)();\n}"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 9 (mmap). 셸코드/정적 바이너리에서 mov eax, 9 ; syscall 형태로 직접 나타날 수 있으며, 6개 인자(rdi,rsi,rdx,r10,r8,r9)가 fd 인자에 -1(0xFFFFFFFF)로 채워지는 것이 익명 매핑의 특징적인 시그니처다.",
+    "pitfalls": [
+      "실패 판정은 NULL이 아니라 MAP_FAILED((void*)-1)와 비교해야 한다. mmap(NULL, ...)의 NULL은 '주소 힌트 없음'이라는 입력 인자일 뿐 반환값과는 무관하다.",
+      "length는 페이지 크기(보통 4096바이트) 단위로 올림되므로 실제 매핑 크기가 요청한 값보다 클 수 있다.",
+      "MAP_PRIVATE 매핑에 쓴 내용은 원본 파일에 반영되지 않는다 (copy-on-write) - MAP_SHARED와 혼동하지 말 것."
+    ],
+    "security_notes": "MAP_ANONYMOUS|PROT_WRITE로 만든 뒤 나중에 PROT_EXEC를 추가하는 흐름(mmap RW -> mprotect RX/RWX)은 W^X(Write XOR Execute) 정책을 우회하는 전형적인 코드 인젝션/셸코드 실행 패턴이다. MAP_FIXED로 이미 매핑된 영역(예: 라이브러리 코드)을 덮어씌우는 것도 익스플로잇에서 사용될 수 있다.",
+    "equivalents": {
+      "linux": "mmap",
+      "windows": "VirtualAlloc"
+    },
+    "related": [
+      "posix-munmap",
+      "posix-mprotect",
+      "win-virtualprotect",
+      "pattern-xor-loop",
+      "posix-open",
+      "posix-fstat"
+    ],
+    "tags": [
+      "MAP_ANONYMOUS",
+      "shellcode loader",
+      "JIT",
+      "demand paging",
+      "RWX",
+      "MAP_FAILED",
+      "syscall 9"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - mmap(2)",
+        "url": "https://man7.org/linux/man-pages/man2/mmap.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - mmap",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/mmap.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-munmap",
+    "type": "function",
+    "name": "munmap",
+    "aliases": [],
+    "category": "memory",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/mman.h",
+    "library": "libc",
+    "signature": "int munmap(void *addr, size_t length);",
+    "summary": "mmap으로 만든 매핑을 해제해 해당 가상 주소 범위를 프로세스 주소 공간에서 제거한다.",
+    "parameters": [
+      {
+        "name": "addr",
+        "type": "void *",
+        "desc": "해제할 매핑의 시작 주소. mmap이 반환한 주소와 페이지 정렬이 맞아야 함",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "length",
+        "type": "size_t",
+        "desc": "해제할 크기(바이트), 페이지 단위로 올림 처리",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정, 예: EINVAL - 정렬 안 된 addr)",
+      "meaning": "성공 후 그 주소 범위에 접근하면 SIGSEGV가 발생한다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <sys/mman.h>\n#include <stdio.h>\n\nint main(void)\n{\n    size_t len = 4096;\n    void *mem = mmap(NULL, len, PROT_READ | PROT_WRITE,\n                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);\n    int r = munmap(mem, len);\n    printf(\"munmap returned %d\\n\", r);\n    return 0;\n}\n",
+    "example_output": "munmap returned 0\n",
+    "compile_cmd": "gcc munmap_example.c -o munmap_example && ./munmap_example",
+    "internals": "해당 가상 주소 범위의 페이지 테이블 엔트리를 제거하고 VMA를 프로세스 주소 공간 목록에서 삭제한다. 물리 페이지는 다른 매핑에서 참조하지 않으면 즉시 회수된다. free()와 달리 malloc이 mmap으로 확보한 대용량 청크(mmap threshold 초과)를 반환할 때도 내부적으로 munmap이 호출된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "mmap으로 매핑한 셸코드/파일을 실행/파싱한 뒤 정리하는 마무리 단계에서 나타난다. munmap 이후 해당 포인터를 계속 사용하는 use-after-unmap은 use-after-free와 유사한 메모리 손상 취약점 패턴이다.",
+      "decompiler_pattern": "munmap(map_base, file_size);",
+      "ida_example": "munmap(v1, 0x1000uLL);\nv1 = 0LL; // 이 초기화가 없으면 UAF 위험"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 11 (munmap).",
+    "pitfalls": [
+      "munmap 이후 해당 포인터를 free하듯 다시 munmap하거나 접근하면 정의되지 않은 동작/크래시로 이어진다.",
+      "addr가 mmap이 실제로 반환한 시작 주소와 정확히 일치하지 않으면(페이지 중간 등) EINVAL로 실패하거나 의도치 않은 범위가 해제될 수 있다."
+    ],
+    "security_notes": "munmap 이후에도 포인터가 해제되지 않고 재사용되는 use-after-unmap은 힙 UAF와 유사하게 익스플로잇 프리미티브로 악용될 수 있다.",
+    "equivalents": {
+      "linux": "munmap",
+      "windows": "VirtualFree"
+    },
+    "related": [
+      "posix-mmap",
+      "posix-mprotect"
+    ],
+    "tags": [
+      "unmap",
+      "use-after-unmap",
+      "cleanup",
+      "syscall 11"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - munmap(2)",
+        "url": "https://man7.org/linux/man-pages/man2/mmap.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - munmap",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/munmap.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-brk",
+    "type": "function",
+    "name": "brk",
+    "aliases": [],
+    "category": "memory",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "N/A (역사적으로 널리 쓰였으나 POSIX 표준에는 없음, SUSv2에서 obsolete로 표시 후 제거됨)",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "int brk(void *addr);",
+    "summary": "프로세스의 데이터 세그먼트(힙) 끝 경계를 addr로 직접 설정한다.",
+    "parameters": [
+      {
+        "name": "addr",
+        "type": "void *",
+        "desc": "새로운 힙 끝 경계로 설정할 주소",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno=ENOMEM)",
+      "meaning": "glibc 래퍼 기준 0/-1 규약이며, 실제 raw 시스템 콜은 실패 시에도 이전 brk 값을 반환하는 등 구현에 따라 다르다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <unistd.h>\n#include <stdio.h>\n\nint main(void)\n{\n    void *start = sbrk(0); /* 현재 브레이크 주소 조회 */\n    brk((char *)start + 4096);\n    void *after = sbrk(0);\n    printf(\"heap grew by %ld bytes\\n\", (long)((char *)after - (char *)start));\n    return 0;\n}\n",
+    "example_output": "heap grew by 4096 bytes\n",
+    "compile_cmd": "gcc brk_example.c -o brk_example && ./brk_example",
+    "internals": "프로세스가 시작될 때 커널이 정해준 program break(힙의 끝 지점) 값을 절대 주소로 재설정하는 저수준 시스템 콜이다. glibc의 malloc은 작은/중간 크기 청크를 관리할 때 이 힙 영역을 brk/sbrk로 확장(sbrk(0) 조회 후 필요한 만큼 brk 이동)해 사용하며, 큰 할당은 mmap으로 우회한다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "오늘날 애플리케이션 코드에서 brk를 직접 호출하는 경우는 드물고, 대부분 glibc malloc 내부 구현(예: sysmalloc)에서만 나타난다. 힙 익스플로잇을 분석할 때 '힙이 어디까지 확장되어 있는가'를 gdb의 vmmap/heap 명령과 함께 brk 값으로 확인하는 용도로 언급된다.",
+      "decompiler_pattern": "old_brk = sbrk(0);\nbrk((char *)old_brk + increment);",
+      "ida_example": "v0 = brk(new_end);"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 12 (brk). gdb에서 힙의 상한을 확인할 때 arg 없이 brk(NULL)을 호출해 현재 값을 얻는 트릭이 쓰이기도 한다(실패하며 현재 브레이크 값을 반환).",
+    "pitfalls": [
+      "brk는 이식성이 없는 Linux/구현별 저수준 API다 - 애플리케이션 코드는 보통 malloc/free를 통해 간접적으로만 사용해야 한다.",
+      "성공/실패 반환값 규약이 raw syscall과 glibc 래퍼 사이에 다르다는 점에 주의해야 한다."
+    ],
+    "security_notes": "힙 익스플로잇(예: house of force류 기법)에서 top chunk 크기를 조작해 brk가 예상보다 훨씬 많은 메모리를 확장하도록 유도하는 경우가 있다.",
+    "equivalents": {
+      "linux": "brk",
+      "windows": "N/A (Windows는 힙 관리에 HeapAlloc/VirtualAlloc을 사용, brk 개념 없음)"
+    },
+    "related": [
+      "posix-sbrk",
+      "posix-mmap",
+      "c-malloc",
+      "c-free"
+    ],
+    "tags": [
+      "program break",
+      "heap",
+      "malloc internals",
+      "syscall 12"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - brk(2)",
+        "url": "https://man7.org/linux/man-pages/man2/brk.2.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-sbrk",
+    "type": "function",
+    "name": "sbrk",
+    "aliases": [],
+    "category": "memory",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "N/A (역사적 API, SUSv2에서 obsolete)",
+    "header": "unistd.h",
+    "library": "libc",
+    "signature": "void *sbrk(intptr_t increment);",
+    "summary": "현재 program break을 increment만큼 상대적으로 이동시키고, 이동 전(舊) break 주소를 반환한다.",
+    "parameters": [
+      {
+        "name": "increment",
+        "type": "intptr_t",
+        "desc": "확장(양수)하거나 축소(음수)할 바이트 수. 0을 넘기면 이동 없이 현재 break 주소만 조회",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "이동 전의 program break 주소",
+      "failure": "(void *)-1 (errno=ENOMEM)",
+      "meaning": "sbrk(0)은 현재 힙 끝 주소를 부작용 없이 조회하는 관용적 사용법이다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <unistd.h>\n#include <stdio.h>\n\nint main(void)\n{\n    void *heap_end = sbrk(0);\n    printf(\"current break = %p\\n\", heap_end);\n    void *old = sbrk(1024);\n    printf(\"old break = %p, new break = %p\\n\", old, sbrk(0));\n    return 0;\n}\n",
+    "example_output": "current break = 0x55...\nold break = 0x55..., new break = 0x55...\n",
+    "compile_cmd": "gcc sbrk_example.c -o sbrk_example && ./sbrk_example",
+    "internals": "brk의 상대 이동 버전 래퍼로, 내부적으로 brk(current + increment)를 호출한다. glibc malloc이 힙을 조금씩 늘려가며 청크를 확보할 때 전통적으로 사용해온 인터페이스이며, sbrk(0)은 사이드 이펙트 없이 현재 힙 상한을 알아내는 표준적인 트릭이다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "sbrk(0) 호출은 '현재 힙 끝 주소를 알고 싶다'는 의도를 명확히 드러내는 관용구다. CTF 힙 문제에서 참가자가 직접 익스플로잇 스크립트에 sbrk(0)을 흉내낸 leak 프리미티브를 만들어 힙 베이스 주소를 계산하는 경우도 있다.",
+      "decompiler_pattern": "heap_base = sbrk(0);",
+      "ida_example": "v0 = sbrk(0LL);"
+    },
+    "assembly_pattern": "brk 시스템 콜(번호 12) 위에 구현된 라이브러리 함수이므로 자체 syscall 번호는 없다.",
+    "pitfalls": [
+      "sbrk(0)이 부작용 없는 조회라는 점과, 실패 시 (void*)-1을 반환한다는 점(NULL이 아님)을 혼동하지 말아야 한다.",
+      "멀티스레드 환경에서 sbrk를 malloc과 별개로 직접 호출하면 힙 메타데이터와 상태가 어긋나 손상될 수 있다."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "sbrk",
+      "windows": "N/A"
+    },
+    "related": [
+      "posix-brk",
+      "posix-mmap",
+      "c-malloc",
+      "c-free"
+    ],
+    "tags": [
+      "heap end",
+      "program break",
+      "malloc internals"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - sbrk / brk(2)",
+        "url": "https://man7.org/linux/man-pages/man2/brk.2.html"
+      }
+    ]
+  },
+  {
+    "id": "posix-mlock",
+    "type": "function",
+    "name": "mlock",
+    "aliases": [
+      "mlock2"
+    ],
+    "category": "memory",
+    "platform": [
+      "posix",
+      "linux"
+    ],
+    "standard": "POSIX.1-2001",
+    "header": "sys/mman.h",
+    "library": "libc",
+    "signature": "int mlock(const void *addr, size_t len);",
+    "summary": "지정한 메모리 범위를 물리 메모리(RAM)에 고정시켜 스왑 아웃되지 않도록 한다.",
+    "parameters": [
+      {
+        "name": "addr",
+        "type": "const void *",
+        "desc": "고정할 영역의 시작 주소 (페이지 정렬 불필요, 내부적으로 걸치는 페이지 전체가 고정됨)",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "len",
+        "type": "size_t",
+        "desc": "고정할 크기(바이트)",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정, 예: ENOMEM - RLIMIT_MEMLOCK 초과, EPERM - 권한 부족)",
+      "meaning": "성공 후 해당 메모리는 프로세스가 명시적으로 munlock하거나 종료할 때까지 스왑되지 않는다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "MCL_CURRENT (mlockall 플래그, 참고)",
+        "decimal": 1,
+        "hex": "0x1",
+        "desc": "mlockall에서 현재 매핑된 모든 페이지를 고정 (mlock 자체의 인자는 아니지만 함께 언급되는 관련 상수)"
+      },
+      {
+        "name": "MCL_FUTURE (mlockall 플래그, 참고)",
+        "decimal": 2,
+        "hex": "0x2",
+        "desc": "mlockall에서 앞으로 매핑될 페이지까지 고정"
+      }
+    ],
+    "example_code": "#include <sys/mman.h>\n#include <string.h>\n#include <stdio.h>\n\nint main(void)\n{\n    char secret[4096];\n    memset(secret, 0, sizeof(secret));\n    int r = mlock(secret, sizeof(secret));\n    printf(\"mlock returned %d\\n\", r);\n    /* 비밀번호/키를 다루는 동안 스왑으로 디스크에 남지 않도록 보호 */\n    munlock(secret, sizeof(secret));\n    return 0;\n}\n",
+    "example_output": "mlock returned 0\n",
+    "compile_cmd": "gcc mlock_example.c -o mlock_example && ./mlock_example",
+    "internals": "커널은 해당 가상 주소가 걸치는 모든 페이지를 즉시 물리 메모리에 적재(필요 시 페이지 폴트 유발)하고, 이후 메모리 회수(reclaim) 대상에서 제외되도록 페이지 플래그를 표시한다. 일반 사용자는 RLIMIT_MEMLOCK 한도 내에서만 mlock을 사용할 수 있다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "암호 라이브러리나 키/패스워드를 다루는 코드가 그 값을 스왑 파일에 노출시키지 않으려고 mlock을 호출하는 것을 보면, 그 주변 버퍼가 '민감한 비밀 데이터(키, 패스워드, 시드)'를 담고 있다는 강력한 힌트가 된다. GnuPG, OpenSSL, SSH 에이전트류 코드에서 자주 나타난다.",
+      "decompiler_pattern": "mlock(key_buf, key_len);\nderive_key(key_buf, password);",
+      "ida_example": "mlock(v3, 0x20uLL); // 이후 v3에 암호화 키가 채워짐"
+    },
+    "assembly_pattern": "x86-64 Linux syscall 번호 149 (mlock).",
+    "pitfalls": [
+      "mlock으로 고정한 메모리는 프로세스가 종료되거나 munlock을 호출해야 해제된다 - free()만으로는 스왑 방지 플래그가 자동으로 풀리지 않는다.",
+      "RLIMIT_MEMLOCK(일반적으로 매우 작은 기본값)을 초과하면 권한 문제로 실패한다."
+    ],
+    "security_notes": "mlock은 민감 정보가 스왑 영역에 평문으로 남는 것을 막기 위한 방어적 기법이며, 이 함수가 감싸는 버퍼는 리버싱 시 우선적으로 살펴볼 만한 비밀 데이터 후보다.",
+    "equivalents": {
+      "linux": "mlock / mlock2",
+      "windows": "VirtualLock"
+    },
+    "related": [
+      "posix-mmap",
+      "posix-munmap",
+      "c-malloc"
+    ],
+    "tags": [
+      "swap prevention",
+      "secret memory",
+      "key material",
+      "RLIMIT_MEMLOCK"
+    ],
+    "sources": [
+      {
+        "title": "Linux man-pages - mlock(2)",
+        "url": "https://man7.org/linux/man-pages/man2/mlock.2.html"
+      },
+      {
+        "title": "POSIX.1-2017 - mlock",
+        "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/mlock.html"
+      }
+    ]
+  }
+]

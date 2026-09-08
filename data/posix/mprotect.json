@@ -1,0 +1,59 @@
+[
+  {
+    "id": "posix-mprotect",
+    "type": "function",
+    "name": "mprotect",
+    "aliases": [],
+    "category": "memory",
+    "platform": ["posix", "linux"],
+    "standard": "POSIX.1-2001",
+    "header": "sys/mman.h",
+    "library": "libc",
+    "signature": "int mprotect(void *addr, size_t len, int prot);",
+    "summary": "지정한 메모리 페이지 범위의 접근 권한(read/write/execute)을 변경한다.",
+    "parameters": [
+      { "name": "addr", "type": "void *", "desc": "권한을 바꿀 영역의 시작 주소. 반드시 페이지 크기로 정렬되어 있어야 한다.", "direction": "in", "nullable": false },
+      { "name": "len", "type": "size_t", "desc": "바꿀 영역의 크기(바이트). 내부적으로 페이지 단위로 올림 처리된다.", "direction": "in", "nullable": false },
+      { "name": "prot", "type": "int", "desc": "PROT_* 플래그를 OR로 조합한 값", "direction": "in", "nullable": false, "notes": "비트 플래그 인자" }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1 (errno 설정)",
+      "meaning": "`if (!mprotect(...))` 형태는 성공했을 때 진입하는 분기다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      { "name": "PROT_NONE", "decimal": 0, "hex": "0x0", "desc": "접근 불가" },
+      { "name": "PROT_READ", "decimal": 1, "hex": "0x1", "desc": "읽기 허용" },
+      { "name": "PROT_WRITE", "decimal": 2, "hex": "0x2", "desc": "쓰기 허용" },
+      { "name": "PROT_EXEC", "decimal": 4, "hex": "0x4", "desc": "실행 허용" },
+      { "name": "PROT_READ|PROT_WRITE (RW)", "decimal": 3, "hex": "0x3", "desc": "읽기+쓰기" },
+      { "name": "PROT_READ|PROT_EXEC (RX)", "decimal": 5, "hex": "0x5", "desc": "읽기+실행" },
+      { "name": "PROT_READ|PROT_WRITE|PROT_EXEC (RWX)", "decimal": 7, "hex": "0x7", "desc": "읽기+쓰기+실행 - self-modifying code, 언패킹, JIT, 런타임 복호화에서 자주 사용" }
+    ],
+    "example_code": "#include <stdio.h>\n#include <sys/mman.h>\n#include <unistd.h>\n\nint main(void)\n{\n    long page_size = sysconf(_SC_PAGESIZE);\n    void *mem = mmap(NULL, page_size, PROT_READ | PROT_WRITE,\n                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);\n\n    int result = mprotect(mem, page_size, PROT_READ | PROT_WRITE | PROT_EXEC);\n    if (!result) {\n        printf(\"mprotect succeeded, memory is now RWX\\n\");\n    }\n    return 0;\n}\n",
+    "example_output": "mprotect succeeded, memory is now RWX\n",
+    "compile_cmd": "gcc mprotect_example.c -o mprotect_example && ./mprotect_example",
+    "internals": "addr가 속한 페이지부터 addr+len이 속한 페이지까지, 페이지 테이블 엔트리의 권한 비트를 커널이 직접 수정한다. 페이지 정렬이 안 된 addr을 넘기면 EINVAL로 실패한다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "mprotect(addr, size, 7) 처럼 prot 인자가 7이면 RWX로 바꾸는 것이다. 이는 packer/unpacker, JIT 컴파일러, 또는 런타임에 코드를 복호화한 뒤 그 자리에서 실행하는 self-modifying code 패턴에서 전형적으로 나타난다. mmap으로 새로 할당한 영역이나 .text 영역을 RWX로 바꾸는 코드는 반드시 그 다음에 무엇을 쓰는지(예: XOR 복호화 루프)를 추적해야 한다.",
+      "decompiler_pattern": "result = mprotect(addr, size, 7);\nif ( !result )\n{\n  // 이 시점부터 addr는 실행 가능하다\n}",
+      "ida_example": "v3 = mprotect(buf, 0x1000, 7);\nif ( !v3 )\n    ((void (*)(void))buf)();  // 복호화된 shellcode를 직접 실행"
+    },
+    "assembly_pattern": "syscall wrapper이므로 x86-64 Linux에서는 결국 mov eax, 10 ; syscall (mprotect의 syscall 번호는 10)로 귀결된다. 정적 바이너리나 syscall을 직접 사용하는 코드에서는 libc 호출 없이 이 패턴만 보일 수도 있다.",
+    "pitfalls": [
+      "addr는 반드시 페이지 크기(보통 4096바이트)로 정렬되어 있어야 한다. 정렬 안 된 임의 주소를 넘기면 실패한다.",
+      "if (mprotect(...)) 는 '실패했을 때' 진입하는 분기이고, if (!mprotect(...)) 가 '성공했을 때' 진입하는 분기다."
+    ],
+    "security_notes": "RWX 페이지는 코드 인젝션의 발판이 될 수 있어 NX/DEP, W^X 정책에서 지양된다. mprotect로 실행 권한을 새로 부여하는 코드는 로더/패커/JIT/익스플로잇 셸코드 어디서나 나타날 수 있으므로 함수 하나만 보고 취약점이라 단정하지 않는다.",
+    "equivalents": { "linux": "mprotect", "windows": "VirtualProtect" },
+    "related": ["win-virtualprotect", "posix-mmap", "pattern-xor-loop"],
+    "tags": ["RWX", "self-modifying code", "unpacking", "JIT", "page permission", "W^X", "NX bypass", "mprotect 7"],
+    "sources": [
+      { "title": "Linux man-pages - mprotect(2)", "url": "https://man7.org/linux/man-pages/man2/mprotect.2.html" },
+      { "title": "POSIX.1-2017 - mprotect", "url": "https://pubs.opengroup.org/onlinepubs/9699919799/functions/mprotect.html" }
+    ]
+  }
+]
