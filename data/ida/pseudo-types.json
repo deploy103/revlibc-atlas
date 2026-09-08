@@ -1,0 +1,213 @@
+[
+  {
+    "id": "ida-_byte",
+    "type": "type",
+    "name": "_BYTE",
+    "aliases": ["BYTE"],
+    "category": "decompiler",
+    "platform": ["ida", "ghidra"],
+    "standard": "IDA pseudocode",
+    "header": "",
+    "library": "",
+    "signature": "typedef unsigned char _BYTE;",
+    "summary": "IDA 디컴파일러가 사용하는 1바이트 부호 없는 정수 pseudo-type.",
+    "internals": "IDA는 원본 타입 정보를 알 수 없는 메모리를 크기별로 _BYTE(1)/_WORD(2)/_DWORD(4)/_QWORD(8)로 표시한다. 실제 C 표준 헤더에는 존재하지 않는, IDA 전용 pseudo-type이다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "`_BYTE v1[1024];` 는 v1이 1024바이트 크기의 버퍼라는 뜻이다. 타입 정보가 없을 뿐 unsigned char 배열과 동일하게 취급하면 된다. Ghidra에서는 보통 undefined1 / byte 로 표시된다.",
+      "decompiler_pattern": "_BYTE v1[1024];\n// v1은 실질적으로 1024바이트 버퍼",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "_BYTE는 실제 C 표준 타입이 아니다. 원본 소스에는 없었고 IDA가 임의로 붙인 이름이므로, 코드를 다시 컴파일하려면 unsigned char로 바꿔야 한다."
+    ],
+    "related": ["ida-_word", "ida-_dword", "ida-_qword", "ida-byref"],
+    "tags": ["pseudo type", "decompiler type", "unsigned char", "1 byte"],
+    "sources": [{ "title": "Hex-Rays Decompiler manual - primitive types", "url": "https://hex-rays.com/products/decompiler/manual/" }]
+  },
+  {
+    "id": "ida-_word",
+    "type": "type",
+    "name": "_WORD",
+    "aliases": ["WORD"],
+    "category": "decompiler",
+    "platform": ["ida", "ghidra"],
+    "standard": "IDA pseudocode",
+    "signature": "typedef unsigned short _WORD;",
+    "summary": "IDA 디컴파일러가 사용하는 2바이트 부호 없는 정수 pseudo-type.",
+    "internals": "unsigned short와 동일한 크기(2바이트)를 나타내는 IDA 전용 이름이다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "`_WORD *p;` 로 캐스팅된 포인터 역참조는 2바이트 단위 접근(예: 16비트 필드, UTF-16 코드유닛)을 의미한다.",
+      "decompiler_pattern": "*(_WORD *)(buf + 4) = value;",
+      "ida_example": ""
+    },
+    "pitfalls": [],
+    "related": ["ida-_byte", "ida-_dword", "ida-_qword"],
+    "tags": ["pseudo type", "decompiler type", "unsigned short", "2 byte"],
+    "sources": [{ "title": "Hex-Rays Decompiler manual - primitive types", "url": "https://hex-rays.com/products/decompiler/manual/" }]
+  },
+  {
+    "id": "ida-_dword",
+    "type": "type",
+    "name": "_DWORD",
+    "aliases": ["DWORD"],
+    "category": "decompiler",
+    "platform": ["ida", "ghidra"],
+    "standard": "IDA pseudocode",
+    "signature": "typedef unsigned int _DWORD;",
+    "summary": "IDA 디컴파일러가 사용하는 4바이트 부호 없는 정수 pseudo-type.",
+    "internals": "unsigned int와 동일한 크기(4바이트)를 나타내는 IDA 전용 이름. Windows API의 DWORD와 이름은 비슷하지만 IDA의 _DWORD는 컴파일러/OS 무관한 순수 크기 표기다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "`*(_DWORD *)(v8 + i)` 같은 표현은 4바이트(32비트) 단위로 메모리를 읽거나 쓴다는 뜻이다. 구조체 필드나 배열 원소 크기를 역추적할 때 자주 마주친다.",
+      "decompiler_pattern": "*(_DWORD *)(a1 + 8) = 0;",
+      "ida_example": ""
+    },
+    "pitfalls": [],
+    "related": ["ida-_byte", "ida-_word", "ida-_qword"],
+    "tags": ["pseudo type", "decompiler type", "unsigned int", "4 byte"],
+    "sources": [{ "title": "Hex-Rays Decompiler manual - primitive types", "url": "https://hex-rays.com/products/decompiler/manual/" }]
+  },
+  {
+    "id": "ida-_qword",
+    "type": "type",
+    "name": "_QWORD",
+    "aliases": ["QWORD"],
+    "category": "decompiler",
+    "platform": ["ida", "ghidra"],
+    "standard": "IDA pseudocode",
+    "signature": "typedef unsigned __int64 _QWORD;",
+    "summary": "IDA 디컴파일러가 사용하는 8바이트 부호 없는 정수 pseudo-type.",
+    "internals": "unsigned __int64와 동일한 크기(8바이트)를 나타내는 IDA 전용 이름. x86-64 포인터/64비트 정수 필드에서 흔히 보인다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "`*(_QWORD *)(a1 + 0x10)` 같은 표현은 8바이트(64비트) 단위 접근이며, x86-64 바이너리에서는 대체로 포인터 필드일 가능성이 높다.",
+      "decompiler_pattern": "v3 = *(_QWORD *)(this + 0x10);",
+      "ida_example": ""
+    },
+    "pitfalls": [],
+    "related": ["ida-_byte", "ida-_word", "ida-_dword"],
+    "tags": ["pseudo type", "decompiler type", "unsigned __int64", "8 byte", "pointer field"],
+    "sources": [{ "title": "Hex-Rays Decompiler manual - primitive types", "url": "https://hex-rays.com/products/decompiler/manual/" }]
+  },
+  {
+    "id": "ida-_oword",
+    "type": "type",
+    "name": "_OWORD",
+    "aliases": ["OWORD"],
+    "category": "decompiler",
+    "platform": ["ida", "ghidra"],
+    "standard": "IDA pseudocode",
+    "signature": "typedef unsigned __int128 _OWORD;",
+    "summary": "IDA 디컴파일러가 사용하는 16바이트(128비트) pseudo-type. XMM 레지스터 하나에 담기는 값을 표현할 때 흔히 등장한다.",
+    "internals": "SSE/XMM 레지스터(128비트) 전체를 한 번에 읽거나 쓰는 명령(movdqu, movaps 등)을 디컴파일할 때, 정확한 타입 정보가 없으면 IDA가 이 크기를 _OWORD로 표시한다. 실제로는 두 개의 64비트 값이거나, 16바이트 구조체/배열 복사, 또는 SIMD 연산의 중간값일 수 있다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "`*(_OWORD *)dst = *(_OWORD *)src;` 형태는 컴파일러가 16바이트 블록 복사(memcpy 인라인화)를 SSE 레지스터로 최적화했을 때 자주 나타난다. 실제 데이터의 의미(구조체 필드 2개인지, 128비트 정수인지)는 문맥으로 판단해야 한다.",
+      "decompiler_pattern": "*(_OWORD *)dest = *(_OWORD *)src;\n// 16바이트를 한 번에 복사하는 SSE 최적화 memcpy",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "_OWORD로 표시된다고 해서 원본 코드에 128비트 정수 연산이 있었다는 뜻은 아니다 - 대부분은 컴파일러가 만든 16바이트 블록 복사/이동 최적화다."
+    ],
+    "related": ["ida-_qword", "ida-_dword"],
+    "tags": ["pseudo type", "decompiler type", "16 byte", "xmm", "simd", "128 bit"],
+    "sources": [{ "title": "Hex-Rays Decompiler manual - primitive types", "url": "https://hex-rays.com/products/decompiler/manual/" }]
+  },
+  {
+    "id": "ida-__int8",
+    "type": "type",
+    "name": "__int8",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["ida", "c", "windows"],
+    "standard": "MSVC 확장 / IDA pseudocode",
+    "signature": "typedef signed char __int8;",
+    "summary": "MSVC에서 유래한 고정 크기 1바이트 부호 있는 정수 타입. IDA도 그대로 채택해서 사용한다.",
+    "internals": "signed char와 동일. unsigned가 붙으면 unsigned __int8로 표시된다.",
+    "reversing": { "importance": "Low", "notes": "표준 C의 int8_t(stdint.h)와 사실상 동일한 개념이다. MSVC/Windows 바이너리 디컴파일 결과에서 더 자주 보인다.", "decompiler_pattern": "", "ida_example": "" },
+    "pitfalls": [],
+    "related": ["ida-__int16", "ida-__int32", "ida-__int64"],
+    "tags": ["fixed width integer", "msvc", "int8_t"],
+    "sources": [{ "title": "Microsoft Learn - Fixed width integer types", "url": "https://learn.microsoft.com/cpp/cpp/int8-int16-int32-int64" }]
+  },
+  {
+    "id": "ida-__int16",
+    "type": "type",
+    "name": "__int16",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["ida", "c", "windows"],
+    "standard": "MSVC 확장 / IDA pseudocode",
+    "signature": "typedef short __int16;",
+    "summary": "MSVC에서 유래한 고정 크기 2바이트 부호 있는 정수 타입.",
+    "internals": "short와 동일. stdint.h의 int16_t에 대응한다.",
+    "reversing": { "importance": "Low", "notes": "", "decompiler_pattern": "", "ida_example": "" },
+    "pitfalls": [],
+    "related": ["ida-__int8", "ida-__int32", "ida-__int64"],
+    "tags": ["fixed width integer", "msvc", "int16_t"],
+    "sources": [{ "title": "Microsoft Learn - Fixed width integer types", "url": "https://learn.microsoft.com/cpp/cpp/int8-int16-int32-int64" }]
+  },
+  {
+    "id": "ida-__int32",
+    "type": "type",
+    "name": "__int32",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["ida", "c", "windows"],
+    "standard": "MSVC 확장 / IDA pseudocode",
+    "signature": "typedef int __int32;",
+    "summary": "MSVC에서 유래한 고정 크기 4바이트 부호 있는 정수 타입.",
+    "internals": "int와 동일. stdint.h의 int32_t에 대응한다.",
+    "reversing": { "importance": "Low", "notes": "", "decompiler_pattern": "", "ida_example": "" },
+    "pitfalls": [],
+    "related": ["ida-__int8", "ida-__int16", "ida-__int64"],
+    "tags": ["fixed width integer", "msvc", "int32_t"],
+    "sources": [{ "title": "Microsoft Learn - Fixed width integer types", "url": "https://learn.microsoft.com/cpp/cpp/int8-int16-int32-int64" }]
+  },
+  {
+    "id": "ida-__int64",
+    "type": "type",
+    "name": "__int64",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["ida", "c", "windows"],
+    "standard": "MSVC 확장 / IDA pseudocode",
+    "signature": "typedef long long __int64;",
+    "summary": "MSVC에서 유래한 고정 크기 8바이트 부호 있는 정수 타입. x86-64 IDA 의사코드의 포인터/64비트 값에서 매우 자주 등장한다.",
+    "internals": "long long과 동일. stdint.h의 int64_t에 대응한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "x86-64 바이너리를 디컴파일하면 지역 변수나 인자 타입으로 __int64가 매우 흔하게 나타난다. 실제로는 포인터인데 타입 추론이 실패해 __int64로만 표시되는 경우도 많으므로, 값이 주소처럼 쓰이는지(역참조되는지) 문맥으로 판단해야 한다.",
+      "decompiler_pattern": "__int64 __fastcall sub_401000(__int64 a1)",
+      "ida_example": ""
+    },
+    "pitfalls": ["__int64로 표시된 변수가 실제로는 포인터인데 IDA가 정수로만 추론한 경우가 흔하다."],
+    "related": ["ida-__int8", "ida-__int16", "ida-__int32", "ida-_qword"],
+    "tags": ["fixed width integer", "msvc", "int64_t", "pointer confusion"],
+    "sources": [{ "title": "Microsoft Learn - Fixed width integer types", "url": "https://learn.microsoft.com/cpp/cpp/int8-int16-int32-int64" }]
+  },
+  {
+    "id": "ida-byref",
+    "type": "concept",
+    "name": "BYREF",
+    "aliases": [],
+    "category": "decompiler",
+    "platform": ["ida"],
+    "standard": "IDA pseudocode",
+    "signature": "",
+    "summary": "IDA가 지역 변수의 주소가 실제로 어딘가에서 &var 형태로 참조/전달됨을 알려주는 주석.",
+    "internals": "디컴파일된 변수 선언 옆에 `// [rsp+..] [rbp-..] BYREF` 형태로 나타난다. 이는 그 변수가 반드시 스택에 실제로 존재하며, 주소가 다른 함수에 전달되었음을 뜻한다(예: fgets(s, ...)처럼 버퍼를 넘기거나, scanf(\"%d\", &n)처럼 스칼라 변수의 주소를 넘기는 경우).",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "BYREF가 붙은 변수는 컴파일러가 레지스터에만 두고 끝낼 수 없는 변수다 - 반드시 스택 슬롯이 있다는 뜻이므로, [rbp-0x..] 오프셋을 기준으로 버퍼 크기나 인접 변수를 분석할 때 신뢰할 수 있는 위치 정보로 활용할 수 있다.",
+      "decompiler_pattern": "char s[64]; // [rsp+0h] [rbp-40h] BYREF",
+      "ida_example": ""
+    },
+    "pitfalls": [],
+    "related": ["reg-rbp", "reg-rsp", "pattern-stack-frame"],
+    "tags": ["stack variable", "address taken", "local variable", "rbp offset"],
+    "sources": [{ "title": "Hex-Rays Decompiler manual", "url": "https://hex-rays.com/products/decompiler/manual/" }]
+  }
+]

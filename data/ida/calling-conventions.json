@@ -1,0 +1,136 @@
+[
+  {
+    "id": "conv-cdecl",
+    "type": "convention",
+    "name": "__cdecl",
+    "aliases": ["cdecl"],
+    "category": "calling-convention",
+    "platform": ["ida", "windows", "c"],
+    "standard": "MSVC / IDA",
+    "signature": "",
+    "summary": "caller(호출한 쪽)가 스택을 정리하는 C의 기본 호출 규약. 인자는 오른쪽에서 왼쪽 순서로 스택에 push된다.",
+    "internals": "함수 호출 후 caller가 직접 스택 포인터를 복구한다 (예: add esp, N). 가변인자 함수(printf 등)는 callee가 인자 개수를 알 수 없으므로 반드시 caller가 정리하는 cdecl을 사용한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "call 명령 이후 caller 쪽에서 add esp, N 으로 스택을 정리하는 패턴이 보이면 __cdecl이다. printf류 가변인자 함수는 거의 항상 cdecl이다.",
+      "decompiler_pattern": "int __cdecl main(int argc, char **argv)",
+      "ida_example": ""
+    },
+    "pitfalls": [],
+    "related": ["conv-stdcall", "conv-fastcall"],
+    "tags": ["calling convention", "caller cleans stack", "variadic"],
+    "sources": [{ "title": "Microsoft Learn - __cdecl", "url": "https://learn.microsoft.com/cpp/cpp/cdecl" }]
+  },
+  {
+    "id": "conv-stdcall",
+    "type": "convention",
+    "name": "__stdcall",
+    "aliases": ["stdcall"],
+    "category": "calling-convention",
+    "platform": ["ida", "windows"],
+    "standard": "MSVC / IDA",
+    "signature": "",
+    "summary": "callee(호출받은 함수)가 스택을 정리하는 호출 규약. 대부분의 Win32 API(kernel32, user32 등)가 사용한다.",
+    "internals": "함수가 반환할 때 ret N 명령으로 자신이 사용한 인자만큼 스택을 스스로 정리한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "ret 8, ret 0Ch 처럼 ret 뒤에 즉시값이 붙어 있으면 stdcall일 가능성이 높다. Win32 API 대부분이 stdcall이라 심볼 이름에 @숫자가 붙는 데코레이션(_FunctionName@8)으로도 알 수 있다.",
+      "decompiler_pattern": "BOOL __stdcall DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)",
+      "ida_example": ""
+    },
+    "pitfalls": [],
+    "related": ["conv-cdecl", "conv-fastcall"],
+    "tags": ["calling convention", "callee cleans stack", "winapi", "name decoration"],
+    "sources": [{ "title": "Microsoft Learn - __stdcall", "url": "https://learn.microsoft.com/cpp/cpp/stdcall" }]
+  },
+  {
+    "id": "conv-fastcall",
+    "type": "convention",
+    "name": "__fastcall",
+    "aliases": ["fastcall"],
+    "category": "calling-convention",
+    "platform": ["ida", "windows", "c"],
+    "standard": "MSVC / IDA",
+    "signature": "",
+    "summary": "처음 몇 개의 인자를 레지스터로 전달하는 호출 규약. x86-64에서는 사실상 모든 표준 호출 규약이 레지스터 기반이라, IDA는 x86-64 함수의 기본 표기로 __fastcall을 흔히 사용한다.",
+    "internals": "32비트 __fastcall(MSVC): 처음 두 정수/포인터 인자를 ECX, EDX로 전달하고 나머지는 스택으로 전달하며 callee가 스택을 정리한다. 64비트에서는 System V AMD64 ABI(Linux)나 Microsoft x64 ABI(Windows) 자체가 이미 레지스터로 인자를 전달하므로, IDA가 이를 뭉뚱그려 __fastcall로 표기하는 경우가 많다 (실제 규약 이름이라기보다 '레지스터로 인자를 받는다'는 표시에 가깝다).",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "IDA 의사코드 함수 시그니처에 __fastcall이 붙어 있으면 인자가 스택이 아니라 레지스터로 전달됐다는 뜻이다. 실제 어셈블리에서 인자 값을 확인하려면 호출 직전에 어떤 레지스터를 채우는지(mov ecx, ... / mov edx, ... 또는 x86-64의 rdi/rsi/rdx/rcx/r8/r9, rcx/rdx/r8/r9) 확인해야 한다.",
+      "decompiler_pattern": "int __fastcall sub_401000(int a1, int a2)",
+      "ida_example": ""
+    },
+    "pitfalls": [
+      "System V AMD64 ABI(Linux)와 Microsoft x64 ABI(Windows)는 둘 다 '레지스터로 인자 전달'이라는 공통점이 있지만 실제 사용 레지스터 순서와 개수가 다르다 (System V: RDI,RSI,RDX,RCX,R8,R9 / MS x64: RCX,RDX,R8,R9). IDA의 __fastcall 표기만 보고 두 ABI를 혼동하면 안 된다."
+    ],
+    "related": ["conv-cdecl", "conv-stdcall", "conv-thiscall", "reg-rax"],
+    "tags": ["calling convention", "register arguments", "x86-64 default", "fastcall"],
+    "sources": [{ "title": "Microsoft Learn - __fastcall", "url": "https://learn.microsoft.com/cpp/cpp/fastcall" }]
+  },
+  {
+    "id": "conv-thiscall",
+    "type": "convention",
+    "name": "__thiscall",
+    "aliases": ["thiscall"],
+    "category": "calling-convention",
+    "platform": ["ida", "windows"],
+    "standard": "MSVC / IDA",
+    "signature": "",
+    "summary": "C++ 비정적 멤버 함수에서 this 포인터를 전달하기 위한 호출 규약. x86에서는 보통 ECX로 this를 전달한다.",
+    "internals": "MSVC x86에서 this는 ECX 레지스터로, 나머지 인자는 스택으로 전달된다(가변인자가 아니면 callee가 스택 정리). x86-64에서는 별도의 thiscall이 없고 첫 번째 정수 인자 자리(RCX 등)에 this가 그대로 들어간다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "IDA가 클래스 메서드로 추정한 함수에 __thiscall이 붙고 첫 인자가 a1(this)로 표시되는 경우가 많다. 가상함수 테이블(vtable)을 통한 호출을 분석할 때의 출발점이 된다.",
+      "decompiler_pattern": "void __thiscall CFoo::Bar(CFoo *this, int x)",
+      "ida_example": ""
+    },
+    "pitfalls": [],
+    "related": ["conv-fastcall", "conv-cdecl"],
+    "tags": ["calling convention", "this pointer", "c++ member function", "vtable"],
+    "sources": [{ "title": "Microsoft Learn - __thiscall", "url": "https://learn.microsoft.com/cpp/cpp/thiscall" }]
+  },
+  {
+    "id": "conv-vectorcall",
+    "type": "convention",
+    "name": "__vectorcall",
+    "aliases": ["vectorcall"],
+    "category": "calling-convention",
+    "platform": ["ida", "windows"],
+    "standard": "MSVC / IDA",
+    "signature": "",
+    "summary": "부동소수점/벡터(SIMD) 인자를 XMM/YMM 레지스터로 최대한 많이 전달하도록 설계된 MSVC 호출 규약.",
+    "internals": "정수 인자는 fastcall과 유사하게 레지스터로, 부동소수점/벡터 인자는 별도로 XMM0-XMM5(x86) 등 더 많은 레지스터를 통해 전달한다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "수치 연산/그래픽스 라이브러리 등에서 드물게 보인다. 여러 float/vector 인자가 XMM 레지스터로 전달되는 것이 보이면 vectorcall일 수 있다.",
+      "decompiler_pattern": "double __vectorcall Distance(Vec3 a, Vec3 b)",
+      "ida_example": ""
+    },
+    "pitfalls": [],
+    "related": ["conv-fastcall"],
+    "tags": ["calling convention", "simd", "xmm", "floating point"],
+    "sources": [{ "title": "Microsoft Learn - __vectorcall", "url": "https://learn.microsoft.com/cpp/cpp/vectorcall" }]
+  },
+  {
+    "id": "ida-noreturn",
+    "type": "macro",
+    "name": "__noreturn",
+    "aliases": ["noreturn"],
+    "category": "decompiler",
+    "platform": ["ida", "c"],
+    "standard": "IDA pseudocode / C11 _Noreturn",
+    "signature": "",
+    "summary": "이 함수가 절대 반환하지 않음을 나타내는 지시자. exit, abort, __stack_chk_fail 같은 함수가 대표적이다.",
+    "internals": "IDA는 함수 흐름을 분석하다가 특정 호출 이후 코드가 도달 불가능함을 감지하면 해당 함수를 __noreturn으로 표시한다. 실제 C에는 C11의 _Noreturn/<stdnoreturn.h>, GCC의 __attribute__((noreturn))이 대응된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "__noreturn 함수 호출 직후에 나오는 코드는 컴파일러가 생성했지만 실행되지 않는 죽은 코드이거나, 다른 함수의 일부가 잘못 붙어버린 것일 수 있다. 함수 경계 인식 오류(예: positive sp 경고)와 함께 나타나기도 한다.",
+      "decompiler_pattern": "void __noreturn sub_401500(void)\n{\n  exit(1);\n}",
+      "ida_example": ""
+    },
+    "pitfalls": [],
+    "related": ["c-exit", "c-abort", "ida-positive-sp"],
+    "tags": ["noreturn", "exit", "abort", "unreachable code", "function boundary"],
+    "sources": [{ "title": "cppreference - noreturn", "url": "https://en.cppreference.com/w/c/language/_Noreturn" }]
+  }
+]

@@ -1,0 +1,25 @@
+[
+  {
+    "id": "ida-positive-sp",
+    "type": "warning",
+    "name": "positive sp value has been detected, the output may be wrong!",
+    "aliases": ["positive sp"],
+    "category": "warning",
+    "platform": ["ida"],
+    "standard": "IDA",
+    "signature": "",
+    "summary": "IDA가 함수 내부에서 스택 포인터(SP) 변화 추적에 실패했다는 경고. 디컴파일 결과를 신뢰할 수 없다는 뜻이다.",
+    "internals": "IDA는 각 명령어가 스택 포인터를 얼마나 변화시키는지(SP delta)를 추적해서 스택 프레임을 재구성한다. 이 추적값이 함수 끝에서 진입 시점과 같은 0이어야 정상인데, 오히려 양수가 되면(스택이 진입 시점보다 덜 쓰인 것처럼 계산되면) 추적이 깨졌다는 뜻으로 이 경고를 낸다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "이 경고가 뜨면 디컴파일된 의사코드의 지역 변수/스택 오프셋을 신뢰하면 안 된다. 흔한 원인: (1) 비정상적인 스택 조작(인라인 어셈블리로 rsp를 직접 조작), (2) 안티 디스어셈블리/난독화 트릭, (3) 함수 경계를 잘못 인식(실제로는 이전 함수의 tail이거나 여러 함수가 겹침), (4) SEH/예외 처리용 특수 스택 구조, (5) self-modifying code. 대응 방법: Assembly(그래프/텍스트) 뷰에서 직접 각 명령어의 스택 변화를 추적하고, 함수 경계를 수동으로 수정(Edit Function)하며, 디컴파일 결과를 맹신하지 않고 원본 명령어를 재확인해야 한다.",
+      "decompiler_pattern": "",
+      "ida_example": ""
+    },
+    "pitfalls": [],
+    "security_notes": "",
+    "related": ["reg-rsp", "pattern-stack-frame", "ida-noreturn"],
+    "tags": ["ida warning", "stack pointer tracking", "sp delta", "decompiler error", "obfuscation", "anti-disassembly", "function boundary"],
+    "sources": [{ "title": "Hex-Rays Decompiler manual - troubleshooting", "url": "https://hex-rays.com/products/decompiler/manual/" }]
+  }
+]
