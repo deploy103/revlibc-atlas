@@ -1,0 +1,824 @@
+[
+  {
+    "id": "c-printf",
+    "type": "function",
+    "name": "printf",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int printf(const char *format, ...);",
+    "summary": "format 문자열을 파싱하며 가변 인자를 대입해 표준출력(stdout)에 출력한다.",
+    "parameters": [
+      { "name": "format", "type": "const char *", "desc": "출력 형식을 지정하는 포맷 문자열 (% 지정자 포함)", "direction": "in", "nullable": false },
+      { "name": "...", "type": "가변 인자", "desc": "포맷 지정자 개수/타입에 대응하는 값들", "direction": "in", "nullable": true }
+    ],
+    "return_value": {
+      "success": "출력한 문자 개수 (널 종료 문자는 제외)",
+      "failure": "음수 값 (출력 오류 발생 시)",
+      "meaning": "반환값 자체보다 format 인자가 신뢰할 수 없는 입력인지 여부가 리버싱에서 훨씬 중요하다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    int x = 42;\n\n    printf(\"x = %d, hex = %#x\\n\", x, x);\n    return 0;\n}\n",
+    "example_output": "x = 42, hex = 0x2a\n",
+    "compile_cmd": "gcc printf_example.c -o printf_example && ./printf_example",
+    "internals": "가변 인자를 va_list로 순회하며 format 문자열의 % 지정자를 하나씩 파싱해 대응하는 인자를 소비한다. 내부적으로 vfprintf(stdout, format, args) 한 겹을 거치며, 최종적으로 stdio 버퍼를 통해 write(2) 계열 시스템 콜로 나간다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "format 인자가 상수 리터럴이 아니라 사용자 입력 버퍼 그 자체인 printf(buf) 형태를 발견하면 포맷 스트링 취약점(CWE-134)을 의심해야 한다. %x/%p로 스택 값을 leak하고, %s로 임의 주소를 읽고, %n으로 임의 주소에 쓸 수 있다. 반대로 printf(\"%s\", buf)처럼 포맷 문자열이 리터럴이고 buf는 인자로만 쓰이면 안전하다. 디컴파일 결과에서 인자가 1개뿐인 printf 호출은 항상 취약점 후보로 표시해야 한다.",
+      "decompiler_pattern": "printf(input);        // 포맷 스트링 취약점 의심 (인자 1개)\nprintf(\"%s\", input);  // 안전한 패턴 (포맷 문자열이 리터럴)",
+      "ida_example": "char buf[256];\nread(0, buf, 256);\nprintf(buf);      // IDA에서 인자 1개짜리 printf는 강력한 취약점 신호"
+    },
+    "assembly_pattern": "System V AMD64 ABI에서 가변 인자 함수를 호출할 때 부동소수점 인자 개수를 al 레지스터에 넣고 호출한다(예: xor eax, eax; call printf). printf(\"...\\n\")처럼 리터럴 문자열 하나만 개행으로 끝나거나 printf(\"%s\\n\", s) 형태는 GCC/Clang 최적화로 puts 호출로 치환되는 경우가 매우 흔하다 - 소스에 printf가 있어도 바이너리에는 puts만 보일 수 있다.",
+    "pitfalls": [
+      "printf(input)처럼 사용자 입력을 포맷 문자열 자리에 직접 넣으면 %n, %s 등으로 메모리 read/write가 가능해진다.",
+      "가변 인자 개수와 포맷 지정자 개수가 맞지 않으면 스택/레지스터의 쓰레기 값을 읽어 정의되지 않은 동작이 발생한다."
+    ],
+    "security_notes": "CWE-134 (Uncontrolled Format String)의 대표 함수. CTF의 '포맷 스트링' 카테고리 문제에서 핵심 취약점 지점으로 등장한다.",
+    "equivalents": {},
+    "related": ["pattern-buffer-overflow", "pattern-stack-frame", "compiler-stack-chk-fail"],
+    "tags": ["format string vulnerability", "%n write", "stack leak", "variadic function", "puts optimization"],
+    "sources": [
+      { "title": "cppreference - printf, fprintf, sprintf, snprintf", "url": "https://en.cppreference.com/w/c/io/fprintf" },
+      { "title": "Linux man-pages - printf(3)", "url": "https://man7.org/linux/man-pages/man3/printf.3.html" }
+    ]
+  },
+  {
+    "id": "c-fprintf",
+    "type": "function",
+    "name": "fprintf",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int fprintf(FILE *stream, const char *format, ...);",
+    "summary": "printf와 동일한 포맷 파싱 규칙으로 지정한 스트림(stdout, stderr, 파일 등)에 출력한다.",
+    "parameters": [
+      { "name": "stream", "type": "FILE *", "desc": "출력 대상 스트림 (예: stdout, stderr, 파일 포인터)", "direction": "in", "nullable": false },
+      { "name": "format", "type": "const char *", "desc": "출력 형식을 지정하는 포맷 문자열", "direction": "in", "nullable": false },
+      { "name": "...", "type": "가변 인자", "desc": "포맷 지정자에 대응하는 값들", "direction": "in", "nullable": true }
+    ],
+    "return_value": {
+      "success": "지정한 스트림에 출력한 문자 개수",
+      "failure": "음수 값",
+      "meaning": "printf와 마찬가지로 반환값보다 format 인자의 출처(리터럴인지 사용자 입력인지)가 리버싱에서 더 중요하다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    fprintf(stdout, \"value: %d\\n\", 7);\n    fprintf(stderr, \"error: %s\\n\", \"bad input\");\n    return 0;\n}\n",
+    "example_output": "stdout: value: 7\nstderr: error: bad input\n  (두 스트림을 하나의 터미널에서 함께 보면 버퍼링 차이로 순서가 뒤섞여 보일 수 있다)",
+    "compile_cmd": "gcc fprintf_example.c -o fprintf_example && ./fprintf_example",
+    "internals": "printf와 동일한 포맷 파싱 엔진을 쓰지만 출력 대상이 고정된 stdout이 아니라 첫 인자로 받은 임의의 FILE 스트림이다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "printf와 같은 포맷 스트링 취약점 위험을 stream 인자만 다르게 해서 그대로 가진다. fprintf(stderr, input)처럼 오류 메시지를 출력하는 코드에서도 동일하게 위험하다. stream이 사용자가 지정한 로그 파일이면, 공격자가 원하는 내용을 그대로 기록하는 로그 인젝션/파일 조작 벡터가 될 수도 있다.",
+      "decompiler_pattern": "fprintf(stderr, input);        // 취약 (인자 2개지만 format이 사용자 입력)\nfprintf(fp, \"%s\", input);      // 안전",
+      "ida_example": "fprintf(stream, buf);"
+    },
+    "assembly_pattern": "printf와 동일한 가변 인자 호출 규약을 따르되 첫 인자로 FILE * 스트림 포인터(rdi)가 추가되고 format은 두 번째 인자(rsi)로 밀린다.",
+    "pitfalls": [
+      "fprintf도 printf와 동일하게 포맷 스트링 취약점에 노출된다.",
+      "반환값(음수)을 확인하지 않으면 쓰기 실패를 놓친다."
+    ],
+    "security_notes": "CWE-134. stderr나 로그 파일에 기록되는 fprintf도 포맷 스트링 검사 대상이다.",
+    "equivalents": {},
+    "related": ["pattern-buffer-overflow", "posix-write"],
+    "tags": ["format string vulnerability", "file output", "stderr logging"],
+    "sources": [
+      { "title": "cppreference - printf, fprintf, sprintf, snprintf", "url": "https://en.cppreference.com/w/c/io/fprintf" },
+      { "title": "Linux man-pages - fprintf(3)", "url": "https://man7.org/linux/man-pages/man3/fprintf.3.html" }
+    ]
+  },
+  {
+    "id": "c-sprintf",
+    "type": "function",
+    "name": "sprintf",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int sprintf(char *str, const char *format, ...);",
+    "summary": "포맷 결과를 stdout이 아니라 str 버퍼에 쓴다. 버퍼 크기를 인자로 받지 않아 오버플로우에 매우 취약하다.",
+    "parameters": [
+      { "name": "str", "type": "char *", "desc": "결과 문자열을 저장할 버퍼 (크기 정보를 받지 않음)", "direction": "out", "nullable": false },
+      { "name": "format", "type": "const char *", "desc": "포맷 문자열", "direction": "in", "nullable": false },
+      { "name": "...", "type": "가변 인자", "desc": "포맷 지정자에 대응하는 값들", "direction": "in", "nullable": true }
+    ],
+    "return_value": {
+      "success": "버퍼에 쓴 문자 개수 (널 종료 문자는 제외)",
+      "failure": "음수 값 (드묾)",
+      "meaning": "sprintf는 버퍼 크기를 모르기 때문에 넘치더라도 실패를 반환하지 않고 조용히 오버플로우를 낸다 - 반환값 검사보다 버퍼 크기 대조가 훨씬 중요하다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    char buf[16];\n\n    sprintf(buf, \"id=%d\", 1234);\n    printf(\"%s\\n\", buf);\n    return 0;\n}\n",
+    "example_output": "id=1234\n",
+    "compile_cmd": "gcc sprintf_example.c -o sprintf_example && ./sprintf_example",
+    "internals": "printf와 동일한 포맷 파싱 엔진을 쓰지만 출력 대상이 사용자가 준 버퍼(str)이며, 버퍼 크기를 전혀 받지 않는다. 내부적으로는 vsprintf(str, format, args)에 위임되는 것과 동일하다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "버퍼 크기를 인자로 받지 않아 sprintf 결과가 실제 버퍼 크기를 넘으면 그대로 스택/힙 오버플로우가 된다. strcpy와 마찬가지로 '길이를 확인하지 않는' 계열의 대표 취약 함수이며, CTF pwnable에서 사용자 입력을 그대로 %s로 다시 조립해 넣는 sprintf(buf, \"%s\", user_input) 패턴이 매우 자주 등장한다. snprintf와 짝을 지어 비교하면 취약점 유무를 바로 판단할 수 있다.",
+      "decompiler_pattern": "char buf[16];\nsprintf(buf, \"%s\", user_input); // user_input이 16바이트보다 길면 오버플로우",
+      "ida_example": "char dest[16]; // [rsp+0h] [rbp-10h] BYREF\nsprintf(dest, \"score:%s\", name); // name 길이 제한 없음 -> 오버플로우 의심"
+    },
+    "assembly_pattern": "printf 계열과 동일한 가변 인자 호출이지만 목적지 버퍼 포인터가 첫 인자(rdi)로 들어간다. 크기 인자가 없다는 점(snprintf는 3번째 인자로 크기가 있음)이 인자 개수 차이로 디스어셈블리에 드러난다.",
+    "pitfalls": [
+      "버퍼 크기를 계산하지 않고 sprintf를 쓰면 항상 오버플로우 가능성을 의심해야 한다.",
+      "snprintf로 바꾸는 것이 표준적인 수정 방법이다."
+    ],
+    "security_notes": "CWE-120 (Buffer Copy without Checking Size of Input)의 printf 계열 버전. gets, strcpy와 함께 3대 오버플로우 함수로 취급된다.",
+    "equivalents": {},
+    "related": ["pattern-buffer-overflow", "pattern-stack-frame", "compiler-stack-chk-fail", "c-strcpy"],
+    "tags": ["buffer overflow", "no bounds check", "pwnable", "format string"],
+    "sources": [
+      { "title": "cppreference - printf, fprintf, sprintf, snprintf", "url": "https://en.cppreference.com/w/c/io/fprintf" },
+      { "title": "Linux man-pages - sprintf(3)", "url": "https://man7.org/linux/man-pages/man3/sprintf.3.html" }
+    ]
+  },
+  {
+    "id": "c-snprintf",
+    "type": "function",
+    "name": "snprintf",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C99",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int snprintf(char *str, size_t size, const char *format, ...);",
+    "summary": "sprintf와 같지만 size로 최대 기록 바이트 수를 제한하는 안전한 버전.",
+    "parameters": [
+      { "name": "str", "type": "char *", "desc": "결과 문자열을 저장할 버퍼", "direction": "out", "nullable": false },
+      { "name": "size", "type": "size_t", "desc": "버퍼 크기 (널 종료 문자 포함 상한)", "direction": "in", "nullable": false },
+      { "name": "format", "type": "const char *", "desc": "포맷 문자열", "direction": "in", "nullable": false },
+      { "name": "...", "type": "가변 인자", "desc": "포맷 지정자에 대응하는 값들", "direction": "in", "nullable": true }
+    ],
+    "return_value": {
+      "success": "만약 잘리지 않았다면 필요했을 전체 길이 (널 제외, size와 무관하게 계산됨)",
+      "failure": "음수 값 (인코딩 오류 등)",
+      "meaning": "반환값이 size 이상이면 출력이 잘렸다(truncate)는 뜻이다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    char buf[8];\n    int n = snprintf(buf, sizeof(buf), \"%d-%d\", 123456, 789);\n\n    printf(\"buf=%s n=%d\\n\", buf, n);\n    return 0;\n}\n",
+    "example_output": "buf=123456- n=10\n",
+    "compile_cmd": "gcc snprintf_example.c -o snprintf_example && ./snprintf_example",
+    "internals": "size 인자로 상한을 두고, 실제로는 그만큼만 쓰지만 반환값은 '만약 무제한이었다면 필요했을 길이'를 그대로 돌려준다. C99부터 str이 NULL이고 size가 0이면 길이만 계산해서 반환하는 것도 허용된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "size 인자로 상한을 강제하는 sprintf의 안전한 대체 함수다. 하지만 반환값이 '실제로 쓴 바이트 수'가 아니라 '잘리지 않았다면 필요했을 전체 길이'라는 점을 착각하면, 이 값을 그대로 다음 버퍼 크기 계산에 사용하다가 논리 오류나 별도의 오버플로우를 만들 수 있다.",
+      "decompiler_pattern": "int n = snprintf(buf, sizeof(buf), \"%s\", input);\nif ( n >= sizeof(buf) )\n  // 잘림 처리",
+      "ida_example": "v3 = snprintf(dest, 16, \"%s\", name); // v3가 16 이상이면 잘렸다는 뜻"
+    },
+    "assembly_pattern": "sprintf와 동일하지만 두 번째 인자(rsi)로 버퍼 크기(size_t)가 추가로 전달된다.",
+    "pitfalls": [
+      "반환값을 '실제로 쓴 길이'로 착각하면 잘림(truncation) 여부 판단을 놓친다.",
+      "size를 sizeof(buf) 대신 잘못된 상수로 하드코딩하면 여전히 오버플로우가 가능하다."
+    ],
+    "security_notes": "sprintf의 안전한 대체. 다만 size 계산이 틀리면 안전장치가 무력화된다.",
+    "equivalents": {},
+    "related": ["c-strcpy"],
+    "tags": ["safe formatting", "truncation", "bounds check", "C99"],
+    "sources": [
+      { "title": "cppreference - printf, fprintf, sprintf, snprintf", "url": "https://en.cppreference.com/w/c/io/fprintf" },
+      { "title": "Linux man-pages - snprintf(3)", "url": "https://man7.org/linux/man-pages/man3/snprintf.3.html" }
+    ]
+  },
+  {
+    "id": "c-puts",
+    "type": "function",
+    "name": "puts",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int puts(const char *s);",
+    "summary": "널 종료 문자열을 stdout에 출력하고 끝에 개행 문자를 자동으로 덧붙인다.",
+    "parameters": [
+      { "name": "s", "type": "const char *", "desc": "출력할 널 종료 문자열", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "음수가 아닌 값",
+      "failure": "EOF (-1)",
+      "meaning": "",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    puts(\"hello\");\n    return 0;\n}\n",
+    "example_output": "hello\n",
+    "compile_cmd": "gcc puts_example.c -o puts_example && ./puts_example",
+    "internals": "문자열 끝의 널을 만날 때까지 그대로 출력하고, 추가로 개행 문자 하나를 덧붙인다. printf와 달리 포맷 파싱을 하지 않으므로 % 문자가 문자열에 있어도 안전하고 더 빠르다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "printf(\"%s\\n\", s)나 printf(\"literal\\n\") 형태를 GCC/Clang이 최적화하면서 puts(s) 또는 puts(\"literal\")로 치환하는 경우가 매우 흔하다. 따라서 소스 코드에 printf만 있었더라도 디스어셈블리/디컴파일 결과에는 puts 호출만 남을 수 있으니, puts를 보고 '원래 printf였을 수 있다'고 추론하는 것이 리버싱에서 중요하다. 포맷 파싱을 하지 않으므로 그 자체는 포맷 스트링 취약점이 없다.",
+      "decompiler_pattern": "puts(\"Access granted\"); // 원래 printf(\"Access granted\\n\")였을 가능성이 높다",
+      "ida_example": "if ( check_password(input) )\n  puts(\"Correct!\");\nelse\n  puts(\"Wrong!\");"
+    },
+    "assembly_pattern": "인자 1개(rdi=문자열 포인터)만 넘기고 가변 인자 규약(al 레지스터 설정)이 필요 없어 printf보다 호출 코드가 짧다. 이 차이로 컴파일러가 printf를 puts로 치환했는지 짐작할 수 있다.",
+    "pitfalls": [
+      "개행을 자동으로 추가하므로 fputs와 출력 결과가 다르다.",
+      "puts만 보고 '이 프로그램은 printf를 안 쓴다'고 단정하면 안 된다 - 컴파일러 치환의 결과일 수 있다."
+    ],
+    "security_notes": "",
+    "equivalents": {},
+    "related": ["posix-write"],
+    "tags": ["compiler optimization", "printf to puts", "string output", "decompiler pattern"],
+    "sources": [
+      { "title": "cppreference - puts", "url": "https://en.cppreference.com/w/c/io/puts" },
+      { "title": "Linux man-pages - puts(3)", "url": "https://man7.org/linux/man-pages/man3/puts.3.html" }
+    ]
+  },
+  {
+    "id": "c-putchar",
+    "type": "function",
+    "name": "putchar",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int putchar(int c);",
+    "summary": "문자 c 하나를 stdout에 출력한다.",
+    "parameters": [
+      { "name": "c", "type": "int", "desc": "출력할 문자 (unsigned char로 변환되어 처리됨)", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "쓴 문자를 unsigned char로 변환 후 int로 반환",
+      "failure": "EOF (-1)",
+      "meaning": "",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    putchar('A');\n    putchar('\\n');\n    return 0;\n}\n",
+    "example_output": "A\n",
+    "compile_cmd": "gcc putchar_example.c -o putchar_example && ./putchar_example",
+    "internals": "단일 문자를 stdout 버퍼에 기록한다. 내부적으로 putc(c, stdout)와 동일하게 동작한다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "printf(\"%c\", c)나 printf(\"A\")처럼 한 글자만 출력하는 printf 호출이 putchar(c)/putchar('A')로 최적화되는 경우가 있다. 루프 안에서 문자를 하나씩 출력하는 코드(예: XOR 디코딩 후 결과를 한 글자씩 출력)에서 자주 보이므로, putchar 호출이 반복되는 루프는 디코딩/복호화 루틴의 출력부일 가능성이 있다.",
+      "decompiler_pattern": "for ( i = 0; i < len; ++i )\n  putchar(buf[i] ^ key);",
+      "ida_example": "putchar(v2 ^ 0x13);"
+    },
+    "assembly_pattern": "인자 1개(edi=문자, int로 승격됨)만 전달하는 짧은 호출. 루프 내에서 반복되면 인라인 카운터/조건 분기와 함께 나타난다.",
+    "pitfalls": [
+      "반환값(int)을 char로 잘못 캐스팅하면 EOF(-1) 판별이 깨질 수 있다."
+    ],
+    "security_notes": "",
+    "equivalents": {},
+    "related": ["posix-write"],
+    "tags": ["character output", "xor loop", "decode routine", "compiler optimization"],
+    "sources": [
+      { "title": "cppreference - putchar", "url": "https://en.cppreference.com/w/c/io/putchar" },
+      { "title": "Linux man-pages - putchar(3)", "url": "https://man7.org/linux/man-pages/man3/putchar.3.html" }
+    ]
+  },
+  {
+    "id": "c-scanf",
+    "type": "function",
+    "name": "scanf",
+    "aliases": ["__isoc99_scanf"],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int scanf(const char *format, ...);",
+    "summary": "표준입력(stdin)에서 format에 맞춰 값을 읽어 대응하는 변수 주소에 대입한다.",
+    "parameters": [
+      { "name": "format", "type": "const char *", "desc": "입력 형식을 지정하는 포맷 문자열", "direction": "in", "nullable": false },
+      { "name": "...", "type": "가변 인자 (포인터)", "desc": "값을 저장할 변수의 주소들", "direction": "out", "nullable": true }
+    ],
+    "return_value": {
+      "success": "성공적으로 변환/대입된 입력 항목 수",
+      "failure": "EOF (입력 실패가 첫 변환 전에 발생한 경우) 또는 예상보다 적은 개수",
+      "meaning": "반환값이 기대한 인자 개수보다 작으면 그 이후 변수들은 전혀 대입되지 않아 미초기화 상태로 남는다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    int n;\n    char name[32];\n\n    scanf(\"%d %31s\", &n, name);\n    printf(\"n=%d name=%s\\n\", n, name);\n    return 0;\n}\n",
+    "example_output": "(표준입력으로 '42 alice'를 입력하면) n=42 name=alice\n",
+    "compile_cmd": "gcc scanf_example.c -o scanf_example && ./scanf_example",
+    "internals": "format 문자열의 각 지정자에 맞춰 표준입력을 파싱하고, 성공적으로 변환/대입한 항목 수를 센다. 공백 처리, 폭 지정자, 대입 억제(*) 등 문법이 printf보다 훨씬 복잡하다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "scanf(\"%s\", buf)는 gets(buf)와 마찬가지로 길이 제한이 없어 스택 버퍼 오버플로우를 유발할 수 있다. 반면 scanf(\"%63s\", buf)처럼 폭(width)을 지정하면 그 길이만큼만 쓰기 때문에 안전해진다 - 디컴파일된 코드에서 %s 앞에 숫자가 있는지 없는지가 취약점 판별의 핵심이다. 또한 scanf는 매칭에 실패한 인자를 건드리지 않으므로, 반환값(성공적으로 채운 인자 수)을 확인하지 않으면 미초기화 변수를 그대로 사용하는 버그로 이어진다. glibc에서는 컴파일 시 scanf 호출이 __isoc99_scanf 심볼로 치환되어 보이는 경우가 많다.",
+      "decompiler_pattern": "char buf[64];\nscanf(\"%s\", buf);      // 오버플로우 가능 (gets와 동일한 위험)\nscanf(\"%63s\", buf);    // 폭 지정으로 안전",
+      "ida_example": "__isoc99_scanf(\"%d\", &v4); // glibc 바이너리에서 scanf가 이 심볼로 보임"
+    },
+    "assembly_pattern": "인자로 넘기는 변수는 값이 아니라 주소(lea rax, [rbp-...]; mov rsi, rax)로 전달된다. glibc 동적 링크 바이너리에서는 scanf가 __isoc99_scanf라는 심볼로 임포트되는 경우가 많다.",
+    "pitfalls": [
+      "%s에 폭 지정이 없으면 gets급 오버플로우 위험이 있다.",
+      "반환값(매칭 성공 개수)을 확인하지 않으면 입력 실패 시 변수가 미초기화 상태로 사용된다.",
+      "&를 빠뜨리면(예: scanf(\"%d\", x)) 정수 값을 주소로 잘못 써서 크래시나 임의 쓰기가 발생할 수 있다."
+    ],
+    "security_notes": "CWE-120/CWE-787. 폭 지정 없는 %s, %[ 는 gets와 동급의 위험으로 취급해야 한다.",
+    "equivalents": {},
+    "related": ["c-gets", "pattern-buffer-overflow", "pattern-stack-frame", "compiler-stack-chk-fail"],
+    "tags": ["unbounded input", "stack overflow", "width specifier", "__isoc99_scanf", "pwnable"],
+    "sources": [
+      { "title": "cppreference - scanf, fscanf, sscanf", "url": "https://en.cppreference.com/w/c/io/fscanf" },
+      { "title": "Linux man-pages - scanf(3)", "url": "https://man7.org/linux/man-pages/man3/scanf.3.html" }
+    ]
+  },
+  {
+    "id": "c-fscanf",
+    "type": "function",
+    "name": "fscanf",
+    "aliases": ["__isoc99_fscanf"],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int fscanf(FILE *stream, const char *format, ...);",
+    "summary": "scanf와 같은 포맷 규칙으로 표준입력이 아니라 지정한 스트림에서 값을 읽는다.",
+    "parameters": [
+      { "name": "stream", "type": "FILE *", "desc": "입력 스트림 (파일 등)", "direction": "in", "nullable": false },
+      { "name": "format", "type": "const char *", "desc": "입력 형식을 지정하는 포맷 문자열", "direction": "in", "nullable": false },
+      { "name": "...", "type": "가변 인자 (포인터)", "desc": "값을 저장할 변수의 주소들", "direction": "out", "nullable": true }
+    ],
+    "return_value": {
+      "success": "성공적으로 변환/대입된 입력 항목 수",
+      "failure": "EOF 또는 예상보다 적은 개수",
+      "meaning": "",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    FILE *fp = fopen(\"data.txt\", \"w\");\n    fputs(\"10 20\", fp);\n    fclose(fp);\n\n    fp = fopen(\"data.txt\", \"r\");\n    int a, b;\n    fscanf(fp, \"%d %d\", &a, &b);\n    printf(\"a=%d b=%d\\n\", a, b);\n    fclose(fp);\n    return 0;\n}\n",
+    "example_output": "a=10 b=20\n",
+    "compile_cmd": "gcc fscanf_example.c -o fscanf_example && ./fscanf_example",
+    "internals": "scanf와 동일한 포맷 파싱 엔진을 쓰며 입력 소스만 임의의 FILE 스트림이다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "설정 파일이나 세이브 파일을 파싱할 때 %s에 폭 제한이 없으면 파일 내용을 조작해 오버플로우를 유발할 수 있다(파일 기반 입력이므로 표준입력 필터링을 우회하는 벡터가 될 수 있음).",
+      "decompiler_pattern": "fscanf(fp, \"%s %d\", name, &score); // name에 폭 제한이 없으면 위험",
+      "ida_example": "fscanf(stream, \"%127s\", v5);"
+    },
+    "assembly_pattern": "scanf와 동일하지만 첫 인자로 FILE * 스트림 포인터가 추가된다.",
+    "pitfalls": [
+      "파일에서 읽어오는 입력이라도 %s 폭 제한이 없으면 scanf와 동일한 위험이 있다.",
+      "반환값이 EOF(-1)이거나 기대한 개수보다 적으면 이후 변수 사용을 중단해야 한다."
+    ],
+    "security_notes": "설정/세이브 파일 파싱 루틴에서 흔히 발견되는 취약점 지점.",
+    "equivalents": {},
+    "related": ["pattern-buffer-overflow"],
+    "tags": ["file parsing", "save file", "config parsing", "width specifier"],
+    "sources": [
+      { "title": "cppreference - scanf, fscanf, sscanf", "url": "https://en.cppreference.com/w/c/io/fscanf" },
+      { "title": "Linux man-pages - fscanf(3)", "url": "https://man7.org/linux/man-pages/man3/fscanf.3.html" }
+    ]
+  },
+  {
+    "id": "c-sscanf",
+    "type": "function",
+    "name": "sscanf",
+    "aliases": ["__isoc99_sscanf"],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int sscanf(const char *str, const char *format, ...);",
+    "summary": "표준입력이나 파일이 아니라 메모리 상의 문자열 str에서 format에 맞춰 값을 읽는다.",
+    "parameters": [
+      { "name": "str", "type": "const char *", "desc": "파싱할 널 종료 문자열", "direction": "in", "nullable": false },
+      { "name": "format", "type": "const char *", "desc": "입력 형식을 지정하는 포맷 문자열", "direction": "in", "nullable": false },
+      { "name": "...", "type": "가변 인자 (포인터)", "desc": "값을 저장할 변수의 주소들", "direction": "out", "nullable": true }
+    ],
+    "return_value": {
+      "success": "성공적으로 변환/대입된 입력 항목 수",
+      "failure": "EOF 또는 예상보다 적은 개수",
+      "meaning": "",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    const char *line = \"user:1000:1000\";\n    char user[16];\n    int uid, gid;\n\n    sscanf(line, \"%15[^:]:%d:%d\", user, &uid, &gid);\n    printf(\"user=%s uid=%d gid=%d\\n\", user, uid, gid);\n    return 0;\n}\n",
+    "example_output": "user=user uid=1000 gid=1000\n",
+    "compile_cmd": "gcc sscanf_example.c -o sscanf_example && ./sscanf_example",
+    "internals": "scanf와 동일한 포맷 파싱 엔진을 쓰지만 입력 소스가 이미 메모리에 있는 문자열이다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "표준입력이 아니라 이미 메모리에 있는 문자열(다른 함수가 반환한 버퍼, 네트워크 패킷 파싱 결과 등)을 파싱할 때 쓰인다. CTF에서는 사용자가 통제하는 문자열을 sscanf로 재파싱하는 패턴(예: \"id:1000\" 형태 문자열을 %d로 파싱)에서 폭 제한 없는 %s나 %[ 지정자가 오버플로우를 유발하는 경우가 흔하다. %d/%x 파싱 결과를 검증 없이 배열 인덱스나 크기로 사용하면 정수 기반 취약점으로도 이어질 수 있다.",
+      "decompiler_pattern": "char name[16];\nsscanf(packet, \"%15[^:]:%d\", name, &id); // 폭 지정이 있어 안전\nsscanf(packet, \"%[^:]:%d\", name, &id);   // 폭 지정이 없어 위험",
+      "ida_example": "sscanf(a1, \"%d,%d\", &v2, &v3);"
+    },
+    "assembly_pattern": "scanf 계열과 동일하지만 첫 인자가 파싱할 소스 문자열 포인터다.",
+    "pitfalls": [
+      "%s, %[ 지정자에 폭 제한이 없으면 대상 버퍼가 스택/힙이든 오버플로우가 가능하다.",
+      "반환되는 매칭 개수를 확인하지 않으면 파싱 실패 시 쓰레기 값을 그대로 신뢰하게 된다."
+    ],
+    "security_notes": "네트워크 패킷/설정 문자열 파싱에서 자주 나타나는 오버플로우 지점.",
+    "equivalents": {},
+    "related": ["pattern-buffer-overflow"],
+    "tags": ["string parsing", "packet parsing", "width specifier", "integer parsing"],
+    "sources": [
+      { "title": "cppreference - scanf, fscanf, sscanf", "url": "https://en.cppreference.com/w/c/io/fscanf" },
+      { "title": "Linux man-pages - sscanf(3)", "url": "https://man7.org/linux/man-pages/man3/sscanf.3.html" }
+    ]
+  },
+  {
+    "id": "c-fputs",
+    "type": "function",
+    "name": "fputs",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int fputs(const char *s, FILE *stream);",
+    "summary": "널 종료 문자열 s를 stream에 그대로 쓴다. puts와 달리 개행을 자동으로 붙이지 않는다.",
+    "parameters": [
+      { "name": "s", "type": "const char *", "desc": "출력할 널 종료 문자열", "direction": "in", "nullable": false },
+      { "name": "stream", "type": "FILE *", "desc": "출력 스트림", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "음수가 아닌 값",
+      "failure": "EOF (-1)",
+      "meaning": "",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    fputs(\"no newline added\", stdout);\n    fputs(\"\\n\", stdout);\n    return 0;\n}\n",
+    "example_output": "no newline added\n",
+    "compile_cmd": "gcc fputs_example.c -o fputs_example && ./fputs_example",
+    "internals": "문자열을 널 문자 직전까지 그대로 스트림에 쓴다. puts와 달리 개행을 자동으로 추가하지 않는다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "puts와 달리 개행을 자동으로 붙이지 않고 포맷 파싱도 하지 않는다. 사용자 입력을 그대로 출력할 때 fputs(input, stdout)처럼 쓰이면 printf(input)과 달리 포맷 스트링 취약점이 없다 - 오히려 '안전하게 문자열을 출력하는' 대조군으로 등장한다.",
+      "decompiler_pattern": "fputs(input, stdout); // 포맷 파싱이 없어 포맷 스트링 취약점 없음",
+      "ida_example": "fputs(banner, stdout);"
+    },
+    "assembly_pattern": "인자 2개(문자열 포인터, FILE *)만 전달하는 단순 호출.",
+    "pitfalls": [
+      "개행이 자동으로 붙지 않으므로 puts와 출력 결과를 혼동하면 안 된다."
+    ],
+    "security_notes": "",
+    "equivalents": {},
+    "related": ["posix-write"],
+    "tags": ["string output", "no format parsing", "safe output"],
+    "sources": [
+      { "title": "cppreference - fputs", "url": "https://en.cppreference.com/w/c/io/fputs" },
+      { "title": "Linux man-pages - fputs(3)", "url": "https://man7.org/linux/man-pages/man3/fputs.3.html" }
+    ]
+  },
+  {
+    "id": "c-fread",
+    "type": "function",
+    "name": "fread",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream);",
+    "summary": "stream에서 size 바이트짜리 원소 nmemb개를 읽어 ptr에 그대로(바이너리) 복사한다.",
+    "parameters": [
+      { "name": "ptr", "type": "void *", "desc": "읽은 데이터를 저장할 버퍼", "direction": "out", "nullable": false },
+      { "name": "size", "type": "size_t", "desc": "원소 하나의 바이트 크기", "direction": "in", "nullable": false },
+      { "name": "nmemb", "type": "size_t", "desc": "읽을 원소 개수", "direction": "in", "nullable": false },
+      { "name": "stream", "type": "FILE *", "desc": "입력 스트림", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "실제로 읽은 완전한 원소 개수 (요청한 nmemb와 같으면 전부 읽은 것)",
+      "failure": "nmemb보다 작은 값 (EOF 또는 오류이며, feof/ferror로 구분해야 한다)",
+      "meaning": "0을 반환했다고 반드시 오류는 아니며 EOF일 수도 있다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nstruct record {\n    int id;\n    char name[8];\n};\n\nint main(void)\n{\n    struct record r = { 1, \"hero\" };\n    FILE *fp = fopen(\"save.bin\", \"wb\");\n    fwrite(&r, sizeof(r), 1, fp);\n    fclose(fp);\n\n    struct record loaded;\n    fp = fopen(\"save.bin\", \"rb\");\n    size_t n = fread(&loaded, sizeof(loaded), 1, fp);\n    fclose(fp);\n\n    if (n == 1)\n        printf(\"id=%d name=%s\\n\", loaded.id, loaded.name);\n    return 0;\n}\n",
+    "example_output": "id=1 name=hero\n",
+    "compile_cmd": "gcc fread_example.c -o fread_example && ./fread_example",
+    "internals": "size*nmemb 바이트를 스트림에서 읽어 ptr이 가리키는 메모리에 그대로 복사한다. 텍스트 처리 없이 바이너리 그대로 복사하므로 구조체나 배열을 통째로 파일에서 읽어들이는 데 사용된다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "파일에서 구조체나 배열을 통째로 읽어 메모리에 그대로 복사하는 패턴(직렬화된 세이브 파일, 설정 바이너리, 네트워크로 받은 헤더 파싱)에서 항상 등장한다. size*nmemb 계산이 오버플로우하거나, 파일 크기 검증 없이 고정 크기 버퍼에 fread(buf, 1, file_size, fp)처럼 파일 크기를 그대로 읽어들이면 힙/스택 오버플로우로 이어질 수 있다. 반환값은 '요청한 개수'가 아니라 '실제로 읽은 완전한 원소 개수'이므로, 확인하지 않으면 파일이 짧을 때 버퍼의 나머지 부분이 미초기화 상태로 남는다.",
+      "decompiler_pattern": "struct save_data sd;\nfread(&sd, sizeof(sd), 1, fp); // 구조체 통째로 읽기 - 세이브/리플레이 파일 파싱의 전형적 패턴",
+      "ida_example": "n = fread(buf, 1, file_size, fp); // file_size가 외부(파일 헤더)에서 온 값이면 buf 오버플로우 의심"
+    },
+    "assembly_pattern": "인자 4개(ptr, size, nmemb, stream)를 순서대로 rdi, rsi, rdx, rcx에 전달. size와 nmemb가 상수로 인라인되어 있으면 IDA에서 sizeof(struct) 값을 역으로 추정하는 단서가 된다.",
+    "pitfalls": [
+      "반환값이 요청한 nmemb보다 작으면 EOF인지 오류인지 구분하려면 feof/ferror를 따로 호출해야 한다.",
+      "파일에서 읽은 크기 값을 검증 없이 fread의 size/nmemb 인자로 그대로 쓰면 오버플로우나 과도한 메모리 읽기로 이어진다."
+    ],
+    "security_notes": "신뢰할 수 없는 파일(세이브 파일, 업로드된 파일)을 fread로 고정 버퍼에 읽어들일 때 크기 검증이 빠지면 CWE-120 계열 취약점이 된다.",
+    "equivalents": { "linux": "read(2) 시스템 콜 (저수준, 버퍼링 없음)", "windows": "ReadFile (Win32 API)" },
+    "related": ["c-malloc", "c-free", "posix-read"],
+    "tags": ["binary read", "save file parsing", "struct deserialization", "heap overflow"],
+    "sources": [
+      { "title": "cppreference - fread", "url": "https://en.cppreference.com/w/c/io/fread" },
+      { "title": "Linux man-pages - fread(3)", "url": "https://man7.org/linux/man-pages/man3/fread.3.html" }
+    ]
+  },
+  {
+    "id": "c-fwrite",
+    "type": "function",
+    "name": "fwrite",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);",
+    "summary": "ptr이 가리키는 메모리에서 size 바이트짜리 원소 nmemb개를 그대로(바이너리) stream에 쓴다.",
+    "parameters": [
+      { "name": "ptr", "type": "const void *", "desc": "쓸 데이터가 있는 버퍼", "direction": "in", "nullable": false },
+      { "name": "size", "type": "size_t", "desc": "원소 하나의 바이트 크기", "direction": "in", "nullable": false },
+      { "name": "nmemb", "type": "size_t", "desc": "쓸 원소 개수", "direction": "in", "nullable": false },
+      { "name": "stream", "type": "FILE *", "desc": "출력 스트림", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "실제로 쓴 완전한 원소 개수 (요청한 nmemb와 같으면 전부 쓴 것)",
+      "failure": "nmemb보다 작은 값",
+      "meaning": "",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    int arr[3] = { 1, 2, 3 };\n    FILE *fp = fopen(\"out.bin\", \"wb\");\n\n    if (fp) {\n        size_t n = fwrite(arr, sizeof(int), 3, fp);\n        printf(\"wrote %zu elements\\n\", n);\n        fclose(fp);\n    }\n    return 0;\n}\n",
+    "example_output": "wrote 3 elements\n",
+    "compile_cmd": "gcc fwrite_example.c -o fwrite_example && ./fwrite_example",
+    "internals": "fread의 반대 방향. 메모리의 데이터를 텍스트 변환 없이 바이트 그대로 스트림에 쓴다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "메모리의 구조체/배열을 바이트 그대로 파일에 직렬화할 때 쓰인다. 반환값이 nmemb보다 작으면 디스크 공간 부족 등 쓰기 실패를 의미하며, 확인하지 않으면 손상된 세이브 파일을 만들 수 있다.",
+      "decompiler_pattern": "fwrite(&sd, sizeof(sd), 1, fp); // 구조체 통째로 저장",
+      "ida_example": "fwrite(buf, 1, len, fp);"
+    },
+    "assembly_pattern": "fread와 동일한 인자 순서(ptr, size, nmemb, stream)를 전달한다.",
+    "pitfalls": [
+      "반환값을 확인하지 않으면 부분적으로만 쓰인 손상된 파일을 정상 파일로 오인할 수 있다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "write(2) 시스템 콜 (저수준, 버퍼링 없음)", "windows": "WriteFile (Win32 API)" },
+    "related": ["posix-write"],
+    "tags": ["binary write", "struct serialization", "save file"],
+    "sources": [
+      { "title": "cppreference - fwrite", "url": "https://en.cppreference.com/w/c/io/fwrite" },
+      { "title": "Linux man-pages - fwrite(3)", "url": "https://man7.org/linux/man-pages/man3/fwrite.3.html" }
+    ]
+  },
+  {
+    "id": "c-fopen",
+    "type": "function",
+    "name": "fopen",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "FILE *fopen(const char *pathname, const char *mode);",
+    "summary": "지정한 경로의 파일을 mode에 따른 접근 방식으로 열고 FILE 스트림 포인터를 반환한다.",
+    "parameters": [
+      { "name": "pathname", "type": "const char *", "desc": "열고자 하는 파일 경로", "direction": "in", "nullable": false },
+      { "name": "mode", "type": "const char *", "desc": "접근 모드 문자열 (\"r\", \"w\", \"a\", \"r+\", \"w+\", \"a+\" 및 \"b\" 접미사)", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "FILE 스트림 포인터",
+      "failure": "NULL",
+      "meaning": "실패 원인은 errno(예: ENOENT, EACCES)를 통해 확인한다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    FILE *fp = fopen(\"flag.txt\", \"w\");\n    fputs(\"dummy\", fp);\n    fclose(fp);\n\n    fp = fopen(\"flag.txt\", \"r\");\n    if (fp == NULL) {\n        perror(\"fopen\");\n        return 1;\n    }\n    fclose(fp);\n    printf(\"opened\\n\");\n    return 0;\n}\n",
+    "example_output": "opened\n",
+    "compile_cmd": "gcc fopen_example.c -o fopen_example && ./fopen_example",
+    "internals": "지정한 경로를 mode에 맞는 접근 권한으로 열고 FILE 구조체(스트림 버퍼, 파일 디스크립터 등)를 힙에 할당해 반환한다. 내부적으로 open(2)을 호출한 뒤 그 결과를 감싼다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "mode 문자열(\"r\", \"w\", \"a\", \"r+\", \"w+\", \"a+\", 및 뒤에 붙는 'b')이 파일에 대해 어떤 권한/동작을 요구하는지 결정한다. CTF의 파일 읽기/쓰기 문제에서 fopen에 넘기는 경로 문자열이 사용자 입력과 연결되어 있으면 경로 조작(path traversal, 예: \"../../flag\")으로 임의 파일을 열 수 있는지 확인해야 한다. 반환값 NULL 체크가 빠지면 이후 fread/fwrite/fclose가 NULL 포인터로 호출되어 크래시가 난다.",
+      "decompiler_pattern": "FILE *fp = fopen(user_path, \"rb\"); // user_path가 사용자 입력이면 경로 조작(디렉터리 traversal) 의심",
+      "ida_example": "v3 = fopen(a1, \"rb\");\nif ( !v3 )\n  exit(1);"
+    },
+    "assembly_pattern": "인자 2개(경로 문자열, mode 문자열)를 rdi, rsi로 전달하는 단순 호출.",
+    "pitfalls": [
+      "mode 문자열의 'b'는 POSIX에서는 아무 의미가 없고(텍스트/바이너리 구분 없음) Windows에서만 개행 변환에 영향을 준다.",
+      "반환값 NULL 체크를 생략하면 이후 스트림 함수 호출에서 크래시가 난다."
+    ],
+    "security_notes": "사용자 입력이 경로에 그대로 들어가면 path traversal(CWE-22)로 임의 파일 읽기/쓰기 문제가 될 수 있다.",
+    "equivalents": { "linux": "open(2) 시스템 콜 (저수준, 버퍼링 없음)", "windows": "CreateFileA/W (Win32 API)" },
+    "related": ["posix-open"],
+    "tags": ["file open", "mode string", "path traversal", "flag file read"],
+    "sources": [
+      { "title": "cppreference - fopen", "url": "https://en.cppreference.com/w/c/io/fopen" },
+      { "title": "Linux man-pages - fopen(3)", "url": "https://man7.org/linux/man-pages/man3/fopen.3.html" }
+    ]
+  },
+  {
+    "id": "c-fclose",
+    "type": "function",
+    "name": "fclose",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int fclose(FILE *stream);",
+    "summary": "스트림 버퍼를 flush하고 파일 디스크립터를 닫은 뒤 FILE 구조체를 해제한다.",
+    "parameters": [
+      { "name": "stream", "type": "FILE *", "desc": "닫을 스트림", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "EOF (-1)",
+      "meaning": "",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    FILE *fp = fopen(\"tmp.txt\", \"w\");\n\n    if (fp) {\n        fputs(\"data\", fp);\n        int rc = fclose(fp);\n        printf(\"fclose returned %d\\n\", rc);\n    }\n    return 0;\n}\n",
+    "example_output": "fclose returned 0\n",
+    "compile_cmd": "gcc fclose_example.c -o fclose_example && ./fclose_example",
+    "internals": "버퍼에 남은 데이터를 flush하고 파일 디스크립터를 닫은 뒤 FILE 구조체(힙에 할당됨)를 해제한다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "fclose된 FILE 포인터를 이후 fread/fwrite/fprintf에 다시 사용하거나 두 번 닫으면(double close), 힙 UAF(Use-After-Free)와 유사한 위험을 가진다 - FILE 구조체가 힙에 할당되기 때문이다.",
+      "decompiler_pattern": "fclose(fp);\n...\nfwrite(data, 1, len, fp); // fp가 이미 닫힌 뒤 재사용 - UAF 유사 버그",
+      "ida_example": "fclose(stream);"
+    },
+    "assembly_pattern": "인자 1개(FILE *)만 전달하는 단순 호출.",
+    "pitfalls": [
+      "닫은 스트림을 다시 사용하거나 두 번 닫으면(double close) 힙 손상으로 이어질 수 있다."
+    ],
+    "security_notes": "FILE 구조체는 힙에 할당되므로 fclose 이후 재사용은 UAF(Use-After-Free)와 유사한 위험을 가진다.",
+    "equivalents": { "linux": "close(2) 시스템 콜", "windows": "CloseHandle (Win32 API)" },
+    "related": ["c-free"],
+    "tags": ["resource cleanup", "use after free", "double close"],
+    "sources": [
+      { "title": "cppreference - fclose", "url": "https://en.cppreference.com/w/c/io/fclose" },
+      { "title": "Linux man-pages - fclose(3)", "url": "https://man7.org/linux/man-pages/man3/fclose.3.html" }
+    ]
+  },
+  {
+    "id": "c-fseek",
+    "type": "function",
+    "name": "fseek",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "int fseek(FILE *stream, long offset, int whence);",
+    "summary": "whence 기준으로 offset만큼 스트림의 파일 위치 지시자를 이동시킨다.",
+    "parameters": [
+      { "name": "stream", "type": "FILE *", "desc": "대상 스트림", "direction": "in", "nullable": false },
+      { "name": "offset", "type": "long", "desc": "이동할 바이트 오프셋 (음수 가능)", "direction": "in", "nullable": false },
+      { "name": "whence", "type": "int", "desc": "기준점 (SEEK_SET/SEEK_CUR/SEEK_END)", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "-1",
+      "meaning": "실패 원인은 errno로 확인한다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [
+      { "name": "SEEK_SET", "decimal": 0, "hex": "0x0", "desc": "파일 시작을 기준으로 이동" },
+      { "name": "SEEK_CUR", "decimal": 1, "hex": "0x1", "desc": "현재 위치를 기준으로 이동" },
+      { "name": "SEEK_END", "decimal": 2, "hex": "0x2", "desc": "파일 끝을 기준으로 이동" }
+    ],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    FILE *fp = fopen(\"data.txt\", \"wb\");\n    fputs(\"Hello, World!\", fp);\n    fclose(fp);\n\n    fp = fopen(\"data.txt\", \"rb\");\n    fseek(fp, 0, SEEK_END);\n    long size = ftell(fp);\n    rewind(fp);\n    printf(\"file size = %ld\\n\", size);\n    fclose(fp);\n    return 0;\n}\n",
+    "example_output": "file size = 13\n",
+    "compile_cmd": "gcc fseek_example.c -o fseek_example && ./fseek_example",
+    "internals": "whence 기준으로 스트림의 파일 위치 지시자를 이동시킨다. lseek(2)를 감싸는 형태이며, 버퍼링된 입출력을 다시 정렬하기 위해 내부 버퍼도 함께 처리한다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "SEEK_SET/SEEK_CUR/SEEK_END 세 기준으로 파일 위치를 이동한다. ftell과 짝을 이루어 'fseek(fp, 0, SEEK_END); size = ftell(fp); rewind(fp);' 형태로 파일 전체 크기를 구하는 관용구가 매우 흔하게 등장하므로, 이 세 함수가 연달아 나오면 '파일 크기 계산' 루틴으로 바로 인식할 수 있다. 또한 fseek로 임의 오프셋을 오가며 파일 포맷의 특정 오프셋(헤더, 테이블)을 읽는 파서에서도 자주 보인다.",
+      "decompiler_pattern": "fseek(fp, 0, SEEK_END);\nlong size = ftell(fp);\nrewind(fp); // 3줄 세트 = 파일 크기 계산 관용구",
+      "ida_example": "fseek(stream, 0, 2); // whence=2 -> SEEK_END, 매크로 이름 없이 숫자로만 보이는 경우가 많다"
+    },
+    "assembly_pattern": "인자 3개(stream, offset, whence)를 전달한다. whence는 리터럴 0/1/2로 인라인되는 경우가 많아 디컴파일러가 매크로 이름 대신 숫자를 그대로 보여준다.",
+    "pitfalls": [
+      "실패 시 -1을 반환하는데 이를 확인하지 않으면 이후 ftell 결과가 의미 없는 값이 된다.",
+      "whence 상수가 SEEK_SET/CUR/END 매크로 이름 없이 0/1/2 숫자로만 디컴파일되는 경우가 많아 헷갈릴 수 있다."
+    ],
+    "security_notes": "",
+    "equivalents": { "linux": "lseek(2) 시스템 콜", "windows": "SetFilePointer / SetFilePointerEx (Win32 API)" },
+    "related": [],
+    "tags": ["file positioning", "file size idiom", "SEEK_SET", "SEEK_END", "SEEK_CUR"],
+    "sources": [
+      { "title": "cppreference - fseek", "url": "https://en.cppreference.com/w/c/io/fseek" },
+      { "title": "Linux man-pages - fseek(3)", "url": "https://man7.org/linux/man-pages/man3/fseek.3.html" }
+    ]
+  },
+  {
+    "id": "c-ftell",
+    "type": "function",
+    "name": "ftell",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "long ftell(FILE *stream);",
+    "summary": "스트림의 현재 파일 위치 지시자 값을 반환한다.",
+    "parameters": [
+      { "name": "stream", "type": "FILE *", "desc": "대상 스트림", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "현재 파일 위치 (long, 0 이상)",
+      "failure": "-1L",
+      "meaning": "실패 원인은 errno로 확인한다.",
+      "errno": true,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    FILE *fp = fopen(\"data.txt\", \"wb\");\n    fputs(\"Hello, World!\", fp);\n    fclose(fp);\n\n    fp = fopen(\"data.txt\", \"rb\");\n    fgetc(fp);\n    fgetc(fp);\n    printf(\"position = %ld\\n\", ftell(fp));\n    fclose(fp);\n    return 0;\n}\n",
+    "example_output": "position = 2\n",
+    "compile_cmd": "gcc ftell_example.c -o ftell_example && ./ftell_example",
+    "internals": "현재 파일 위치 지시자 값을 반환한다. fseek(fp, 0, SEEK_END) 직후 호출하면 파일 전체 크기를 알아내는 관용적인 방법이 된다.",
+    "reversing": {
+      "importance": "Medium",
+      "notes": "fseek(fp, 0, SEEK_END) 직후 호출되어 파일 전체 크기를 구하는 용도로 가장 흔히 등장한다. 반환형이 long이라 32비트 long 환경에서는 2GB(0x7FFFFFFF)를 넘는 파일 크기를 표현하지 못한다. 실패 시 -1L을 반환하는데, 이 값을 부호 체크 없이 malloc 크기나 fread의 nmemb로 넘기면 문제가 될 수 있다.",
+      "decompiler_pattern": "fseek(fp, 0, SEEK_END);\nsize = ftell(fp); // 파일 크기\nrewind(fp);\nbuf = malloc(size);\nfread(buf, 1, size, fp);",
+      "ida_example": "v2 = ftell(stream);"
+    },
+    "assembly_pattern": "인자 1개(FILE *)만 전달하는 단순 호출. 반환값은 rax(long)에 담긴다.",
+    "pitfalls": [
+      "실패 시 -1을 반환하는데, 부호 체크 없이 malloc 크기로 쓰면 malloc(-1)이 되어 사실상 malloc(SIZE_MAX)를 시도하게 된다.",
+      "32비트 long 환경에서는 2GB(0x7FFFFFFF)를 넘는 파일 크기를 표현하지 못한다."
+    ],
+    "security_notes": "",
+    "equivalents": {},
+    "related": [],
+    "tags": ["file size idiom", "SEEK_END", "malloc size calculation"],
+    "sources": [
+      { "title": "cppreference - ftell", "url": "https://en.cppreference.com/w/c/io/ftell" },
+      { "title": "Linux man-pages - ftell(3)", "url": "https://man7.org/linux/man-pages/man3/ftell.3.html" }
+    ]
+  },
+  {
+    "id": "c-rewind",
+    "type": "function",
+    "name": "rewind",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "void rewind(FILE *stream);",
+    "summary": "스트림의 파일 위치를 처음(offset 0)으로 되돌리고 오류/EOF 표시자를 초기화한다.",
+    "parameters": [
+      { "name": "stream", "type": "FILE *", "desc": "대상 스트림", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "반환값 없음 (void)",
+      "failure": "반환값 없음 (void) - 실패 여부는 ferror()로 확인해야 한다",
+      "meaning": "fseek(stream, 0, SEEK_SET)과 달리 성공/실패를 직접 반환하지 않는다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    FILE *fp = fopen(\"data.txt\", \"wb\");\n    fputs(\"Hello, World!\", fp);\n    fclose(fp);\n\n    fp = fopen(\"data.txt\", \"rb\");\n    int c = fgetc(fp);\n    printf(\"first read: %c\\n\", c);\n    rewind(fp);\n    c = fgetc(fp);\n    printf(\"after rewind: %c\\n\", c);\n    fclose(fp);\n    return 0;\n}\n",
+    "example_output": "first read: H\nafter rewind: H\n",
+    "compile_cmd": "gcc rewind_example.c -o rewind_example && ./rewind_example",
+    "internals": "fseek(stream, 0, SEEK_SET)을 호출한 것과 같지만 추가로 스트림의 오류 및 EOF 표시자를 초기화한다. 반환값이 없어(void) 실패를 감지할 방법이 fseek보다 제한적이다.",
+    "reversing": {
+      "importance": "Low",
+      "notes": "fseek(stream, 0, SEEK_SET)과 동일한 위치 이동을 수행하지만 반환값이 없는(void) 함수라서 실패 여부를 직접 알 수 없다 - 실패했는지 확인하려면 별도로 ferror()를 호출해야 한다. 파일을 처음부터 다시 읽어야 하는 재파싱 루틴, 혹은 fseek+ftell로 크기를 구한 뒤 원위치로 되돌리는 관용구의 마지막 단계로 자주 등장한다.",
+      "decompiler_pattern": "fseek(fp, 0, SEEK_END);\nsize = ftell(fp);\nrewind(fp); // == fseek(fp, 0, SEEK_SET) + 오류 표시자 초기화",
+      "ida_example": "rewind(stream);"
+    },
+    "assembly_pattern": "인자 1개(FILE *)만 전달한다. 반환값이 없어 호출 뒤 rax를 검사하는 코드가 따라오지 않는다는 점으로 fseek 호출과 구분할 수 있다.",
+    "pitfalls": [
+      "반환값이 없어(void) 실패 여부를 코드만으로 바로 알 수 없다."
+    ],
+    "security_notes": "",
+    "equivalents": {},
+    "related": [],
+    "tags": ["file positioning", "SEEK_SET equivalent", "error indicator reset"],
+    "sources": [
+      { "title": "cppreference - rewind", "url": "https://en.cppreference.com/w/c/io/rewind" },
+      { "title": "Linux man-pages - rewind(3)", "url": "https://man7.org/linux/man-pages/man3/rewind.3.html" }
+    ]
+  }
+]

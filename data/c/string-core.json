@@ -1,0 +1,262 @@
+[
+  {
+    "id": "c-strcmp",
+    "type": "function",
+    "name": "strcmp",
+    "aliases": [],
+    "category": "string",
+    "platform": [
+      "c"
+    ],
+    "standard": "C89",
+    "header": "string.h",
+    "library": "libc",
+    "signature": "int strcmp(const char *s1, const char *s2);",
+    "summary": "두 널 종료 문자열을 바이트 단위로 사전식 비교한다.",
+    "parameters": [
+      {
+        "name": "s1",
+        "type": "const char *",
+        "desc": "비교할 첫 번째 문자열",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "s2",
+        "type": "const char *",
+        "desc": "비교할 두 번째 문자열",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "0이 아닌 값",
+      "meaning": "s1 == s2 이면 0. s1이 사전순으로 앞이면 음수, 뒤면 양수를 반환한다. 정확한 크기는 구현별로 다르므로 부호만 신뢰해야 한다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "EQUAL",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "두 문자열이 완전히 동일함을 의미"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n\nint main(void)\n{\n    const char *input = \"admin\";\n\n    if (!strcmp(input, \"admin\")) {\n        printf(\"access granted\\n\");\n    } else {\n        printf(\"access denied\\n\");\n    }\n    return 0;\n}\n",
+    "example_output": "access granted\n",
+    "compile_cmd": "gcc strcmp_example.c -o strcmp_example && ./strcmp_example",
+    "internals": "각 문자열의 대응 바이트를 unsigned char로 캐스팅해 순서대로 비교하다가, 서로 다른 바이트를 만나거나 둘 다 '\\0'에 도달하면 멈춘다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "패스워드/시리얼/플래그 문자열 비교, 커맨드 디스패치(argv 파싱), 매직 문자열 검사 등 거의 모든 '조건 분기'의 핵심에 strcmp가 있다. 디컴파일 결과에서 strcmp 호출 직후의 비교(==0, !=0)를 반드시 확인해야 한다.",
+      "decompiler_pattern": "if ( !strcmp(input, \"admin\") )\n  sub_401000();",
+      "ida_example": "if ( !strcmp(a1, \"admin\") )\n    sub_401000();\n\n// strcmp는 같으면 0을 반환한다.\n// !0 은 C에서 true(1)이다.\n// 따라서 a1이 \"admin\"과 같을 때 sub_401000()이 호출된다."
+    },
+    "assembly_pattern": "짧고 상수인 문자열 비교는 컴파일러가 실제 strcmp 호출을 생략하고 4/8바이트 단위 mov+cmp로 인라인화하는 경우가 많다(특히 -O2). 최적화가 낮거나 문자열 길이가 가변이면 call strcmp / PLT를 통한 call strcmp@plt 형태로 남는다.",
+    "pitfalls": [
+      "strcmp(a,b) == 0 이 '같다'라는 뜻이다. 0/1 boolean으로 착각해 조건을 반대로 해석하는 실수가 흔하다.",
+      "반환값의 정확한 절대값(-1, 1 등)은 구현에 따라 다르다. 부호(음수/0/양수)만 의미가 있다."
+    ],
+    "security_notes": "",
+    "equivalents": {
+      "linux": "strcmp",
+      "windows": "lstrcmpA / lstrcmpW, CompareStringA/W"
+    },
+    "related": [
+      "c-strncmp",
+      "c-memcmp",
+      "c-strcspn"
+    ],
+    "tags": [
+      "password check",
+      "command dispatch",
+      "argument validation",
+      "string comparison",
+      "flag check",
+      "strcmp == 0"
+    ],
+    "sources": [
+      {
+        "title": "cppreference - strcmp",
+        "url": "https://en.cppreference.com/w/c/string/byte/strcmp"
+      },
+      {
+        "title": "Linux man-pages - strcmp(3)",
+        "url": "https://man7.org/linux/man-pages/man3/strcmp.3.html"
+      }
+    ]
+  },
+  {
+    "id": "c-strcspn",
+    "type": "function",
+    "name": "strcspn",
+    "aliases": [],
+    "category": "string",
+    "platform": [
+      "c"
+    ],
+    "standard": "C89",
+    "header": "string.h",
+    "library": "libc",
+    "signature": "size_t strcspn(const char *s, const char *reject);",
+    "summary": "s의 시작부터 reject에 포함된 문자가 처음 나타나기 전까지의 길이(바이트 수)를 반환한다.",
+    "parameters": [
+      {
+        "name": "s",
+        "type": "const char *",
+        "desc": "검사할 문자열",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "reject",
+        "type": "const char *",
+        "desc": "찾을 문자들의 집합 (부분 문자열이 아니라 문자 하나하나가 대상)",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "reject의 문자를 만나기 전까지의 길이. reject의 문자가 하나도 없으면 strlen(s)와 같다.",
+      "failure": "실패 개념이 없다 (항상 값을 반환)",
+      "meaning": "",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n\nint main(void)\n{\n    char s[] = \"hello\\n\";\n\n    s[strcspn(s, \"\\r\\n\")] = '\\0';\n    printf(\"[%s]\\n\", s);\n    return 0;\n}\n",
+    "example_output": "[hello]\n",
+    "compile_cmd": "gcc strcspn_example.c -o strcspn_example && ./strcspn_example",
+    "internals": "s[0]부터 순서대로 각 문자가 reject 문자열 안에 포함되어 있는지 검사하고, 처음으로 포함되는 위치의 인덱스를 반환한다. 널 종료 문자('\\0')는 reject에 없는 것으로 취급되어 그 지점에서 탐색이 끝난다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "`s[strcspn(s, \"\\r\\n\")] = 0;` 은 fgets()로 줄 단위 입력을 받은 뒤 끝에 남은 개행 문자(\\n 또는 \\r\\n)를 제거하는 매우 전형적인 관용구다. 이 패턴을 보면 바로 위에 fgets(buf, size, stdin) 호출이 있었을 가능성이 매우 높다.",
+      "decompiler_pattern": "fgets(s, 64, stdin);\ns[strcspn(s, \"\\r\\n\")] = 0;",
+      "ida_example": "fgets(s, 64, stdin);\ns[strcspn(s, \"\\r\\n\")] = 0;\n\n// strcspn(s, \"\\r\\n\") -> \\r 또는 \\n이 처음 등장하는 인덱스\n// 그 위치에 0(NUL)을 대입 -> 개행 제거"
+    },
+    "assembly_pattern": "짧은 reject 문자열(\"\\r\\n\" 등)에 대해서는 컴파일러가 strcspn 호출 대신 인라인 비교로 최적화할 수도 있지만, 실전에서는 대부분 call strcspn 형태로 남는다.",
+    "pitfalls": [
+      "reject를 '부분 문자열'로 착각하기 쉽지만 실제로는 '문자 집합'이다. strcspn(s, \"ab\")는 \"ab\"라는 부분 문자열이 아니라 'a' 또는 'b' 중 하나를 찾는다.",
+      "s 안에 reject 문자가 전혀 없으면 strlen(s)와 동일한 값이 반환되므로, 반환값을 인덱스로 바로 대입해도 안전하다(널 종료 위치에 0을 다시 쓰는 것과 같음)."
+    ],
+    "security_notes": "",
+    "equivalents": {},
+    "related": [
+      "c-strspn",
+      "c-strpbrk",
+      "c-fgets",
+      "c-gets"
+    ],
+    "tags": [
+      "newline removal",
+      "fgets pattern",
+      "input sanitization",
+      "trim",
+      "\\r\\n",
+      "strcspn newline removal"
+    ],
+    "sources": [
+      {
+        "title": "cppreference - strcspn",
+        "url": "https://en.cppreference.com/w/c/string/byte/strcspn"
+      },
+      {
+        "title": "Linux man-pages - strcspn(3)",
+        "url": "https://man7.org/linux/man-pages/man3/strcspn.3.html"
+      }
+    ]
+  },
+  {
+    "id": "c-memcmp",
+    "type": "function",
+    "name": "memcmp",
+    "aliases": [],
+    "category": "string",
+    "platform": [
+      "c"
+    ],
+    "standard": "C89",
+    "header": "string.h",
+    "library": "libc",
+    "signature": "int memcmp(const void *s1, const void *s2, size_t n);",
+    "summary": "메모리 영역 두 곳을 처음 n바이트만큼 바이트 단위로 비교한다.",
+    "parameters": [
+      {
+        "name": "s1",
+        "type": "const void *",
+        "desc": "비교할 첫 번째 메모리 블록",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "s2",
+        "type": "const void *",
+        "desc": "비교할 두 번째 메모리 블록",
+        "direction": "in",
+        "nullable": false
+      },
+      {
+        "name": "n",
+        "type": "size_t",
+        "desc": "비교할 바이트 수",
+        "direction": "in",
+        "nullable": false
+      }
+    ],
+    "return_value": {
+      "success": "0",
+      "failure": "0이 아닌 값",
+      "meaning": "두 블록이 동일하면 0. 다르면 첫 번째로 다른 바이트를 unsigned char로 비교한 결과의 부호를 반환한다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [
+      {
+        "name": "EQUAL",
+        "decimal": 0,
+        "hex": "0x0",
+        "desc": "두 메모리 블록이 완전히 동일함"
+      }
+    ],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n\nint main(void)\n{\n    unsigned char key[4]   = {0xDE, 0xAD, 0xBE, 0xEF};\n    unsigned char input[4] = {0xDE, 0xAD, 0xBE, 0xEF};\n\n    if (!memcmp(key, input, sizeof(key))) {\n        printf(\"match\\n\");\n    } else {\n        printf(\"no match\\n\");\n    }\n    return 0;\n}\n",
+    "example_output": "match\n",
+    "compile_cmd": "gcc memcmp_example.c -o memcmp_example && ./memcmp_example",
+    "internals": "문자열과 달리 널 바이트에서 멈추지 않는다. 지정한 n바이트를 항상 끝까지 비교하므로 이진 데이터, 바이너리 키, 체크섬, 해시 다이제스트 비교에 적합하다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "길이가 고정된 바이너리 비교(매직 바이트, 시리얼 키, 체크섬, 해시 다이제스트 비교)에서 strcmp 대신 memcmp가 사용된다. `if (!memcmp(...))` 도 strcmp와 동일하게 '같으면 진입'하는 패턴이다.",
+      "decompiler_pattern": "if ( !memcmp(input, key, 16) )\n  sub_401000();",
+      "ida_example": "if ( !memcmp(a1, &unk_403000, 16) )\n    puts(\"correct!\");"
+    },
+    "assembly_pattern": "짧고 고정된 길이(4/8/16바이트)는 SIMD(movdqu+pcmpeqb) 또는 여러 개의 cmp 명령으로 인라인화되는 경우가 많다.",
+    "pitfalls": [
+      "strcmp와 마찬가지로 0이 '같다'는 뜻이다.",
+      "n이 실제 버퍼 크기보다 크면 버퍼 오버리드(over-read)가 발생할 수 있다."
+    ],
+    "security_notes": "",
+    "equivalents": {},
+    "related": [
+      "c-strcmp",
+      "c-memcpy"
+    ],
+    "tags": [
+      "binary compare",
+      "magic bytes",
+      "key check",
+      "checksum",
+      "memcmp == 0"
+    ],
+    "sources": [
+      {
+        "title": "cppreference - memcmp",
+        "url": "https://en.cppreference.com/w/c/string/byte/memcmp"
+      },
+      {
+        "title": "Linux man-pages - memcmp(3)",
+        "url": "https://man7.org/linux/man-pages/man3/memcmp.3.html"
+      }
+    ]
+  }
+]

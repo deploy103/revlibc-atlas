@@ -1,0 +1,97 @@
+[
+  {
+    "id": "c-fgets",
+    "type": "function",
+    "name": "fgets",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "char *fgets(char *s, int size, FILE *stream);",
+    "summary": "stream에서 최대 size-1자를 읽어 s에 저장하고 널로 끝낸다. 개행 문자를 만나면 그것까지 포함해서 저장한다.",
+    "parameters": [
+      { "name": "s", "type": "char *", "desc": "입력을 저장할 버퍼", "direction": "out", "nullable": false },
+      { "name": "size", "type": "int", "desc": "버퍼 크기 (널 종료 문자 포함)", "direction": "in", "nullable": false },
+      { "name": "stream", "type": "FILE *", "desc": "입력 스트림 (예: stdin)", "direction": "in", "nullable": false }
+    ],
+    "return_value": {
+      "success": "s (버퍼 포인터)",
+      "failure": "NULL (EOF이거나 오류가 발생해 아무 문자도 읽지 못한 경우)",
+      "meaning": "반환값을 검사하지 않고 바로 사용하면 실패 시 미초기화 버퍼를 참조하게 된다.",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n#include <string.h>\n\nint main(void)\n{\n    char s[64];\n\n    if (fgets(s, sizeof(s), stdin)) {\n        s[strcspn(s, \"\\r\\n\")] = '\\0';\n        printf(\"you typed: %s\\n\", s);\n    }\n    return 0;\n}\n",
+    "example_output": "(표준입력에 hello 를 입력하면) you typed: hello\n",
+    "compile_cmd": "gcc fgets_example.c -o fgets_example && ./fgets_example",
+    "internals": "size-1개 문자를 읽거나, 개행 문자를 읽거나, EOF에 도달할 때까지 읽는다. gets()와 달리 항상 최대 길이를 지정하므로 그 자체로는 버퍼 경계를 넘지 않는다.",
+    "reversing": {
+      "importance": "High",
+      "notes": "입력 함수 중 가장 안전한 축에 속하지만, 바로 다음에 strcspn(s, \"\\r\\n\")로 개행을 제거하는 패턴이 세트로 자주 등장한다. size 인자가 실제 버퍼 크기와 다르게 하드코딩되어 있으면(예: 버퍼는 32바이트인데 size로 64를 넘김) 여전히 오버플로우가 가능하므로, 버퍼 선언 크기와 size 인자를 반드시 대조해야 한다.",
+      "decompiler_pattern": "char s[64]; // [rsp+0h] [rbp-40h] BYREF\nfgets(s, 64, stdin);\ns[strcspn(s, \"\\r\\n\")] = 0;",
+      "ida_example": ""
+    },
+    "assembly_pattern": "",
+    "pitfalls": [
+      "char s[64]; fgets(s, 64, stdin); 자체는 일반적인 64바이트 오버플로우를 일으키지 않는다 - size 인자가 실제 버퍼 크기와 같기 때문이다. 오버플로우를 의심하려면 size 인자가 버퍼보다 크게 주어졌는지 먼저 확인해야 한다.",
+      "개행 문자가 버퍼에 그대로 남아있을 수 있어 strcspn 등으로 제거하지 않으면 이후 strcmp 비교가 항상 실패할 수 있다."
+    ],
+    "security_notes": "size를 정확히 버퍼 크기로 주는 한 안전하다. 반환값(NULL 가능성)을 검사하지 않는 코드는 미초기화 메모리 사용 버그로 이어질 수 있다.",
+    "equivalents": {},
+    "related": ["c-strcspn", "c-gets", "posix-read"],
+    "tags": ["safe input", "line input", "newline", "buffer size check"],
+    "sources": [
+      { "title": "cppreference - fgets", "url": "https://en.cppreference.com/w/c/io/fgets" },
+      { "title": "Linux man-pages - fgets(3)", "url": "https://man7.org/linux/man-pages/man3/fgets.3.html" }
+    ]
+  },
+  {
+    "id": "c-gets",
+    "type": "function",
+    "name": "gets",
+    "aliases": [],
+    "category": "io",
+    "platform": ["c"],
+    "standard": "C89 (C11에서 표준에서 완전히 제거됨)",
+    "header": "stdio.h",
+    "library": "libc",
+    "signature": "char *gets(char *s);",
+    "summary": "표준입력에서 한 줄을 길이 제한 없이 읽어 s에 저장한다. 버퍼 크기를 알 방법이 없어 C11에서 표준 자체에서 삭제된 위험한 함수.",
+    "parameters": [
+      { "name": "s", "type": "char *", "desc": "입력을 저장할 버퍼 (크기 정보를 받지 않음)", "direction": "out", "nullable": false }
+    ],
+    "return_value": {
+      "success": "s",
+      "failure": "NULL",
+      "meaning": "",
+      "errno": false,
+      "get_last_error": false
+    },
+    "constants": [],
+    "example_code": "#include <stdio.h>\n\nint main(void)\n{\n    char s[64];\n    gets(s); /* 실제 코드에는 절대 사용하지 말 것 */\n    printf(\"%s\\n\", s);\n    return 0;\n}\n",
+    "example_output": "(입력 길이가 64바이트를 넘으면 스택이 손상될 수 있다)",
+    "compile_cmd": "gcc -Wall gets_example.c -o gets_example  # gets 사용 시 강한 경고 또는 최신 glibc에서는 링크 실패",
+    "internals": "개행 또는 EOF를 만날 때까지 길이 제한 없이 계속 읽어 들인다.",
+    "reversing": {
+      "importance": "Critical",
+      "notes": "바이너리에서 gets 심볼(또는 PLT stub)이 보이면 그 자체로 스택 버퍼 오버플로우 익스플로잇 포인트일 가능성이 매우 높다. CTF pwnable 문제에서 매우 흔하게 등장하는 취약 함수다.",
+      "decompiler_pattern": "char s[64]; // [rsp+0h] [rbp-40h] BYREF\ngets(s);",
+      "ida_example": ""
+    },
+    "assembly_pattern": "",
+    "pitfalls": [
+      "길이 제한이 없어 fgets(s, 64, stdin)와 근본적으로 다르다. 버퍼 크기와 무관하게 항상 오버플로우 가능성을 의심해야 한다."
+    ],
+    "security_notes": "CWE-120/CWE-787 계열 취약점의 대표 원인 함수. 사용 자체가 강한 취약점 신호로 간주된다.",
+    "equivalents": {},
+    "related": ["c-fgets", "c-scanf"],
+    "tags": ["buffer overflow", "stack smashing", "unbounded input", "pwnable", "deprecated"],
+    "sources": [
+      { "title": "cppreference - gets (removed in C11)", "url": "https://en.cppreference.com/w/c/io/gets" },
+      { "title": "Linux man-pages - gets(3)", "url": "https://man7.org/linux/man-pages/man3/gets.3.html" }
+    ]
+  }
+]
