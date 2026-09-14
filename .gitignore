@@ -5,3 +5,16 @@ Thumbs.db
 node_modules/
 *.log
 .env
+
+# Local agent instructions, prompts, and personal work notes
+AGENTS.md
+요구사항.md
+.agent/
+.agents/
+PROMPORT.md
+PROMPT.md
+PROMPTS.md
+worklog*.md
+WORKLOG*.md
+작업일지*.md
+작업노트*.md
