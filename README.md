@@ -95,7 +95,7 @@ revlibc-atlas/
 │   ├── test_data.py            # 데이터 검증 + 규모/플래그십 항목 확인
 │   ├── test_links.py           # related 링크 무결성 + 빌드 산출물 일관성
 │   ├── test_search.py          # 검색 랭킹 테스트 실행기 (node 래퍼)
-│   ├── test_search.js          # 실제 검색 시나리오 테스트 (요구사항.md #30)
+│   ├── test_search.js          # 실제 검색 시나리오 테스트
 │   └── run_all.py              # 위 세 테스트를 순서대로 실행
 └── docs/
     ├── DATA_FORMAT.md           # 데이터 스키마 정의
@@ -137,7 +137,7 @@ python3 tools/build.py     # 먼저 빌드가 되어 있어야 함
 python3 tests/run_all.py   # test_data.py, test_links.py, test_search.py 순서대로 실행
 ```
 
-`tests/test_search.js` 는 요구사항.md #30에 명시된 필수 검색 시나리오
+`tests/test_search.js` 는 주요 검색 시나리오
 (`strcmp`, `mprotect 7`, `0x40`, `_BYTE`, `fastcall`, `positive sp`,
 `1779033703`, `6A09E667`, `16777619`, `stack canary`, `__stack_chk_fail` 등)를
 Node.js로 직접 실행해 검증하고, 검색 성능(반복 200회 평균 응답시간)도 함께 측정한다.
@@ -162,7 +162,7 @@ Node.js가 없는 환경에서는 자동으로 건너뛴다.
 
 ## 8. Coverage
 
-`python3 tools/coverage.py` 실행 시 AGENTS.md / 요구사항.md에 실제로 열거된
+`python3 tools/coverage.py` 실행 시 스크립트의 `TARGET_GROUPS`에 정의된
 target 함수/개념 목록 대비 구현 현황을 계산해 `docs/COVERAGE.md`를 갱신한다.
 추측으로 "전체 ISO C 함수 100%" 같은 값을 채우지 않고, 스코프하지 않은 영역은
 정직하게 "0/0 (v1 스코프 아님)"으로 표시한다. 최신 수치는 `docs/COVERAGE.md`를
